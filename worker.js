@@ -1,6 +1,6 @@
 /**
- * Travel Map API - Cloudflare Worker v3
- * Fixed province detection + work/personal trip breakdown
+ * Travel Map API - Cloudflare Worker v4
+ * Added international country support
  */
 
 export default {
@@ -9,7 +9,9 @@ export default {
 
     const hasData = url.searchParams.has('work') ||
                     url.searchParams.has('personal') ||
-                    url.searchParams.has('prov');
+                    url.searchParams.has('prov') ||
+                    url.searchParams.has('persCountries') ||
+                    url.searchParams.has('workCountries');
 
     if (!hasData) {
       return new Response(generateUsagePage(), {
@@ -21,6 +23,8 @@ export default {
     const personalParam = url.searchParams.get('personal') || '';
     const provParam = url.searchParams.get('prov') || '';
     const provPersParam = url.searchParams.get('provPers') || '';
+    const workCountriesParam = url.searchParams.get('workCountries') || '';
+    const persCountriesParam = url.searchParams.get('persCountries') || '';
     const workTripsParam = url.searchParams.get('workTrips') || '';
     const persTripsParam = url.searchParams.get('persTrips') || '';
     const title = url.searchParams.get('title') || 'Travel Map';
@@ -29,6 +33,8 @@ export default {
     const personalStates = personalParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const workProvinces = provParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const personalProvinces = provPersParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
+    const workCountries = workCountriesParam.toUpperCase().split(',').filter(s => s.trim().length === 3);
+    const personalCountries = persCountriesParam.toUpperCase().split(',').filter(s => s.trim().length === 3);
 
     // Parse work trip counts
     const workTripCounts = {};
@@ -66,12 +72,14 @@ export default {
     const personalOnly = personalStates.filter(s => !workStates.includes(s));
     const allStates = [...new Set([...workStates, ...personalStates])];
     const allProvinces = [...new Set([...workProvinces, ...personalProvinces])];
+    const allCountries = [...new Set([...workCountries, ...personalCountries])];
     const pct = allStates.length > 0 ? Math.round(allStates.length / 50 * 100) : 0;
 
     const mapHtml = generateMapHtml({
       workStates, personalStates, workProvinces, personalProvinces,
+      workCountries, personalCountries,
       workTripCounts, persTripCounts, totalTripCounts,
-      bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
+      bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title
     });
 
     return new Response(mapHtml, {
@@ -87,8 +95,9 @@ export default {
 function generateMapHtml(data) {
   const {
     workStates, personalStates, workProvinces, personalProvinces,
+    workCountries, personalCountries,
     workTripCounts, persTripCounts, totalTripCounts,
-    bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
+    bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title
   } = data;
 
   const stateNames = {
@@ -107,6 +116,24 @@ function generateMapHtml(data) {
     AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',
     NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',
     NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon'
+  };
+
+  const countryNames = {
+    AFG:'Afghanistan',ALB:'Albania',DZA:'Algeria',ARG:'Argentina',AUS:'Australia',
+    AUT:'Austria',BHS:'Bahamas',BEL:'Belgium',BLZ:'Belize',BRA:'Brazil',
+    BGR:'Bulgaria',KHM:'Cambodia',CHL:'Chile',CHN:'China',COL:'Colombia',
+    CRI:'Costa Rica',HRV:'Croatia',CUB:'Cuba',CZE:'Czech Republic',DNK:'Denmark',
+    DOM:'Dominican Republic',ECU:'Ecuador',EGY:'Egypt',EST:'Estonia',FIN:'Finland',
+    FRA:'France',DEU:'Germany',GRC:'Greece',GTM:'Guatemala',HND:'Honduras',
+    HUN:'Hungary',ISL:'Iceland',IND:'India',IDN:'Indonesia',IRL:'Ireland',
+    ISR:'Israel',ITA:'Italy',JAM:'Jamaica',JPN:'Japan',KEN:'Kenya',
+    LVA:'Latvia',LTU:'Lithuania',LUX:'Luxembourg',MYS:'Malaysia',MEX:'Mexico',
+    MAR:'Morocco',NLD:'Netherlands',NZL:'New Zealand',NIC:'Nicaragua',NOR:'Norway',
+    PAN:'Panama',PER:'Peru',PHL:'Philippines',POL:'Poland',PRT:'Portugal',
+    PRI:'Puerto Rico',ROU:'Romania',RUS:'Russia',SGP:'Singapore',SVK:'Slovakia',
+    SVN:'Slovenia',ZAF:'South Africa',KOR:'South Korea',ESP:'Spain',SWE:'Sweden',
+    CHE:'Switzerland',TWN:'Taiwan',THA:'Thailand',TUR:'Turkey',GBR:'United Kingdom',
+    UKR:'Ukraine',URY:'Uruguay',VAT:'Vatican City',VEN:'Venezuela',VNM:'Vietnam'
   };
 
   const maxTrips = Math.max(1, ...Object.values(totalTripCounts));
@@ -197,6 +224,7 @@ function generateMapHtml(data) {
     .stat-personal { color: #e91e63; font-weight: 600; }
     .stat-both { color: #9c27b0; font-weight: 600; }
     .stat-prov { color: #00bcd4; font-weight: 600; }
+    .stat-country { color: #4caf50; font-weight: 600; }
     .stat-divider { width: 1px; height: 18px; background: #ddd; }
     .info-box {
       padding: 8px 12px;
@@ -249,6 +277,7 @@ function generateMapHtml(data) {
         <div class="stat-divider"></div>
         <span class="stat-both">${bothStates.length} both</span>
         ${allProvinces.length > 0 ? `<div class="stat-divider"></div><span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>` : ''}
+        ${allCountries.length > 0 ? `<div class="stat-divider"></div><span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>` : ''}
       </div>
     </div>
   </div>
@@ -259,11 +288,14 @@ function generateMapHtml(data) {
     const personalStates = ${JSON.stringify(personalStates)};
     const workProvinces = ${JSON.stringify(workProvinces)};
     const personalProvinces = ${JSON.stringify(personalProvinces)};
+    const workCountries = ${JSON.stringify(workCountries)};
+    const personalCountries = ${JSON.stringify(personalCountries)};
     const workTripCounts = ${JSON.stringify(workTripCounts)};
     const persTripCounts = ${JSON.stringify(persTripCounts)};
     const totalTripCounts = ${JSON.stringify(totalTripCounts)};
     const stateNames = ${JSON.stringify(stateNames)};
     const provNames = ${JSON.stringify(provNames)};
+    const countryNames = ${JSON.stringify(countryNames)};
     const maxTrips = ${maxTrips};
 
     // Province name to code mapping for the Canada GeoJSON (codeforamerica uses full names)
@@ -322,8 +354,30 @@ function generateMapHtml(data) {
       return null;
     }
 
-    function getCategory(code, isProvince) {
-      if (isProvince) {
+    function getCountryCode(props) {
+      // Natural Earth GeoJSON uses ISO_A3 or ADM0_A3 for 3-letter codes
+      if (props.ISO_A3 && props.ISO_A3 !== '-99') {
+        return props.ISO_A3.toUpperCase();
+      }
+      if (props.ADM0_A3) {
+        return props.ADM0_A3.toUpperCase();
+      }
+      if (props.iso_a3 && props.iso_a3 !== '-99') {
+        return props.iso_a3.toUpperCase();
+      }
+      return null;
+    }
+
+    function getCategory(code, locationType) {
+      if (locationType === 'country') {
+        const inWork = workCountries.includes(code);
+        const inPers = personalCountries.includes(code);
+        if (inWork && inPers) return 'both';
+        if (inWork) return 'work';
+        if (inPers) return 'personal';
+        return 'unvisited';
+      }
+      if (locationType === 'province') {
         const inWork = workProvinces.includes(code);
         const inPers = personalProvinces.includes(code);
         if (inWork && inPers) return 'both';
@@ -331,6 +385,7 @@ function generateMapHtml(data) {
         if (inPers) return 'personal';
         return 'unvisited';
       }
+      // Default: state
       const inWork = workStates.includes(code);
       const inPers = personalStates.includes(code);
       if (inWork && inPers) return 'both';
@@ -352,7 +407,7 @@ function generateMapHtml(data) {
 
     function styleState(feature) {
       const code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
-      const category = getCategory(code, false);
+      const category = getCategory(code, 'state');
       const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
@@ -360,16 +415,32 @@ function generateMapHtml(data) {
 
     function styleProvince(feature) {
       const code = getProvinceCode(feature.properties);
-      const category = getCategory(code, true);
+      const category = getCategory(code, 'province');
+      const count = totalTripCounts[code] || 0;
+      const { color, opacity } = getColor(category, count);
+      return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
+    }
+
+    function styleCountry(feature) {
+      const code = getCountryCode(feature.properties);
+      // Skip USA and Canada as they're handled separately with states/provinces
+      if (code === 'USA' || code === 'CAN') {
+        return { fillColor: 'transparent', weight: 0, opacity: 0, fillOpacity: 0 };
+      }
+      const category = getCategory(code, 'country');
       const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
     }
 
     function highlightFeature(e) {
+      const code = e.target.locationCode;
+      const type = e.target.locationType;
+      // Don't highlight USA/Canada country outlines
+      if (type === 'country' && (code === 'USA' || code === 'CAN')) return;
       e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.9 });
       e.target.bringToFront();
-      info.update(e.target.feature, e.target.isProvince);
+      info.update(e.target.feature, e.target.locationType);
     }
 
     function resetHighlight(e, layer) { layer.resetStyle(e.target); info.update(); }
@@ -380,7 +451,7 @@ function generateMapHtml(data) {
       this.update();
       return this._div;
     };
-    info.update = function(feature, isProvince) {
+    info.update = function(feature, locationType) {
       if (!feature) {
         this._div.innerHTML = '<h4>Hover over a state</h4><div class="trips">to see details</div>';
         return;
@@ -388,18 +459,29 @@ function generateMapHtml(data) {
       const props = feature.properties || {};
       let code, name;
       
-      // Detect if this is a province by checking if name exists in provNameToCode
-      // This is a fallback in case isProvince flag isn't set correctly
-      var detectedProvince = isProvince || (props.name && provNameToCode[props.name]);
+      // Detect location type - check for country first, then province, then state
+      var detectedType = locationType;
+      if (!detectedType) {
+        if (props.ISO_A3 || props.ADM0_A3) {
+          detectedType = 'country';
+        } else if (props.name && provNameToCode[props.name]) {
+          detectedType = 'province';
+        } else {
+          detectedType = 'state';
+        }
+      }
       
-      if (detectedProvince) {
+      if (detectedType === 'country') {
+        code = getCountryCode(props);
+        name = countryNames[code] || props.NAME || props.name || props.ADMIN || code;
+      } else if (detectedType === 'province') {
         code = getProvinceCode(props);
         name = provNames[code] || props.name || code;
       } else {
         code = fipsToState[feature.id] || props.STUSPS || props.postal || '';
         name = stateNames[code] || props.name || props.NAME || code;
       }
-      const category = getCategory(code, detectedProvince);
+      const category = getCategory(code, detectedType);
       const workCount = workTripCounts[code] || 0;
       const persCount = persTripCounts[code] || 0;
       const totalCount = totalTripCounts[code] || 0;
@@ -438,13 +520,33 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
+    // Fetch countries first (renders behind states/provinces)
+    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+      .then(r => r.json())
+      .then(data => {
+        const layer = L.geoJson(data, {
+          style: styleCountry,
+          onEachFeature: (f, l) => {
+            const code = getCountryCode(f.properties);
+            l.locationType = 'country';
+            l.locationCode = code;
+            // Only add interactivity for visited countries (not USA/CAN)
+            if (code !== 'USA' && code !== 'CAN') {
+              l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+            }
+          }
+        }).addTo(map);
+      });
+
     fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
       .then(r => r.json())
       .then(data => {
         const layer = L.geoJson(data, {
           style: styleState,
           onEachFeature: (f, l) => {
-            l.isProvince = false;
+            const code = fipsToState[f.id] || f.properties.STUSPS || '';
+            l.locationType = 'state';
+            l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
@@ -456,7 +558,9 @@ function generateMapHtml(data) {
         const layer = L.geoJson(data, {
           style: styleProvince,
           onEachFeature: (f, l) => {
-            l.isProvince = true;
+            const code = getProvinceCode(f.properties);
+            l.locationType = 'province';
+            l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
