@@ -326,13 +326,23 @@ function generateMapHtml(data) {
       "54":"WV","55":"WI","56":"WY"
     };
 
-    const map = L.map('map', { center: [44, -98], zoom: 4, minZoom: 3, maxZoom: 10 });
+    const map = L.map('map', { center: [44, -98], zoom: 4, minZoom: 2, maxZoom: 10 });
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OSM &copy; CARTO',
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(map);
+
+    // Create panes for proper z-ordering (lower zIndex = behind)
+    const countriesPane = map.createPane('countries');
+    countriesPane.style.zIndex = 400;
+    
+    const statesPane = map.createPane('states');
+    statesPane.style.zIndex = 450;
+    
+    const provincesPane = map.createPane('provinces');
+    provincesPane.style.zIndex = 450;
 
     const labelsPane = map.createPane('labels');
     labelsPane.style.zIndex = 650;
@@ -423,11 +433,15 @@ function generateMapHtml(data) {
 
     function styleCountry(feature) {
       const code = getCountryCode(feature.properties);
-      // Skip USA and Canada as they're handled separately with states/provinces
+      // Skip USA and Canada completely - they're handled with states/provinces
       if (code === 'USA' || code === 'CAN') {
-        return { fillColor: 'transparent', weight: 0, opacity: 0, fillOpacity: 0 };
+        return { fillColor: 'transparent', fillOpacity: 0, weight: 0, opacity: 0, stroke: false, interactive: false };
       }
       const category = getCategory(code, 'country');
+      // Only style visited countries
+      if (category === 'unvisited') {
+        return { fillColor: '#dfe6e9', fillOpacity: 0.3, weight: 0.5, opacity: 0.5, color: '#ccc' };
+      }
       const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
@@ -520,18 +534,20 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
-    // Fetch countries first (renders behind states/provinces)
+    // Fetch countries first (renders in background pane)
     fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
       .then(r => r.json())
       .then(data => {
         const layer = L.geoJson(data, {
           style: styleCountry,
+          pane: 'countries',
           onEachFeature: (f, l) => {
             const code = getCountryCode(f.properties);
             l.locationType = 'country';
             l.locationCode = code;
-            // Only add interactivity for visited countries (not USA/CAN)
-            if (code !== 'USA' && code !== 'CAN') {
+            // Only add interactivity for visited countries (not USA/CAN/unvisited)
+            const category = getCategory(code, 'country');
+            if (code !== 'USA' && code !== 'CAN' && category !== 'unvisited') {
               l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
             }
           }
@@ -543,6 +559,7 @@ function generateMapHtml(data) {
       .then(data => {
         const layer = L.geoJson(data, {
           style: styleState,
+          pane: 'states',
           onEachFeature: (f, l) => {
             const code = fipsToState[f.id] || f.properties.STUSPS || '';
             l.locationType = 'state';
@@ -557,6 +574,7 @@ function generateMapHtml(data) {
       .then(data => {
         const layer = L.geoJson(data, {
           style: styleProvince,
+          pane: 'provinces',
           onEachFeature: (f, l) => {
             const code = getProvinceCode(f.properties);
             l.locationType = 'province';
