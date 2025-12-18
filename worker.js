@@ -1,24 +1,12 @@
 /**
- * Travel Map API - Cloudflare Worker
- * Renders travel maps from URL parameters (for internal wiki embedding)
- *
- * Usage:
- *   ?work=NY,CA,TX&personal=OH,HI&prov=NL&trips=NY:40,CA:9,TX:17
- *
- * Parameters:
- *   work     - Comma-separated state codes visited for work
- *   personal - Comma-separated state codes visited personally
- *   prov     - Comma-separated Canadian province codes (work)
- *   provPers - Comma-separated Canadian province codes (personal)
- *   trips    - Trip counts as STATE:COUNT pairs (e.g., NY:40,CA:9)
- *   title    - Optional custom title for the map
+ * Travel Map API - Cloudflare Worker v2
+ * Fixed province detection with name-to-code mapping
  */
 
 export default {
   async fetch(request) {
     const url = new URL(request.url);
 
-    // Check if any data parameters provided
     const hasData = url.searchParams.has('work') ||
                     url.searchParams.has('personal') ||
                     url.searchParams.has('prov');
@@ -29,7 +17,6 @@ export default {
       });
     }
 
-    // Parse parameters
     const workParam = url.searchParams.get('work') || '';
     const personalParam = url.searchParams.get('personal') || '';
     const provParam = url.searchParams.get('prov') || '';
@@ -37,13 +24,11 @@ export default {
     const tripsParam = url.searchParams.get('trips') || '';
     const title = url.searchParams.get('title') || 'Travel Map';
 
-    // Parse state lists
     const workStates = workParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const personalStates = personalParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const workProvinces = provParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const personalProvinces = provPersParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
 
-    // Parse trip counts: "NY:40,CA:9,TX:17"
     const tripCounts = {};
     if (tripsParam) {
       tripsParam.split(',').forEach(pair => {
@@ -54,7 +39,6 @@ export default {
       });
     }
 
-    // Calculate statistics
     const bothStates = workStates.filter(s => personalStates.includes(s));
     const workOnly = workStates.filter(s => !personalStates.includes(s));
     const personalOnly = personalStates.filter(s => !workStates.includes(s));
@@ -62,20 +46,9 @@ export default {
     const allProvinces = [...new Set([...workProvinces, ...personalProvinces])];
     const pct = allStates.length > 0 ? Math.round(allStates.length / 50 * 100) : 0;
 
-    // Generate map HTML
     const mapHtml = generateMapHtml({
-      workStates,
-      personalStates,
-      workProvinces,
-      personalProvinces,
-      tripCounts,
-      bothStates,
-      workOnly,
-      personalOnly,
-      allStates,
-      allProvinces,
-      pct,
-      title
+      workStates, personalStates, workProvinces, personalProvinces,
+      tripCounts, bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
     });
 
     return new Response(mapHtml, {
@@ -167,7 +140,7 @@ function generateMapHtml(data) {
     }
     .swatch-work { background: #ff9800; }
     .swatch-personal { background: #e91e63; }
-    .swatch-both { background: linear-gradient(135deg, #ff9800 50%, #e91e63 50%); }
+    .swatch-both { background: #9c27b0; }
     .swatch-unvisited { background: #dfe6e9; }
     .map-container {
       background: #fff;
@@ -260,6 +233,24 @@ function generateMapHtml(data) {
     const provNames = ${JSON.stringify(provNames)};
     const maxTrips = ${maxTrips};
 
+    // Province name to code mapping for the Canada GeoJSON (codeforamerica uses full names)
+    const provNameToCode = {
+      'Alberta': 'AB',
+      'British Columbia': 'BC',
+      'Manitoba': 'MB',
+      'New Brunswick': 'NB',
+      'Newfoundland and Labrador': 'NL',
+      'Nova Scotia': 'NS',
+      'Northwest Territories': 'NT',
+      'Nunavut': 'NU',
+      'Ontario': 'ON',
+      'Prince Edward Island': 'PE',
+      'Quebec': 'QC',
+      'Saskatchewan': 'SK',
+      'Yukon': 'YT',
+      'Yukon Territory': 'YT'
+    };
+
     const fipsToState = {
       "01":"AL","02":"AK","04":"AZ","05":"AR","06":"CA","08":"CO","09":"CT","10":"DE",
       "11":"DC","12":"FL","13":"GA","15":"HI","16":"ID","17":"IL","18":"IN","19":"IA",
@@ -284,6 +275,21 @@ function generateMapHtml(data) {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 20, pane: 'labels'
     }).addTo(map);
+
+    function getProvinceCode(props) {
+      // The codeforamerica GeoJSON uses 'name' with full province names
+      if (props.name && provNameToCode[props.name]) {
+        return provNameToCode[props.name];
+      }
+      // Fallback to other possible properties
+      if (props.iso_3166_2) {
+        return props.iso_3166_2.replace('CA-', '');
+      }
+      if (props.postal) {
+        return props.postal.toUpperCase();
+      }
+      return null;
+    }
 
     function getCategory(code, isProvince) {
       if (isProvince) {
@@ -313,15 +319,17 @@ function generateMapHtml(data) {
       }
     }
 
-    function style(feature, isProvince) {
-      let code;
-      if (isProvince) {
-        code = feature.properties.iso_3166_2?.replace('CA-', '') ||
-               feature.properties.postal || feature.properties.name?.substring(0,2).toUpperCase();
-      } else {
-        code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
-      }
-      const category = getCategory(code, isProvince);
+    function styleState(feature) {
+      const code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
+      const category = getCategory(code, false);
+      const count = tripCounts[code] || 0;
+      const { color, opacity } = getColor(category, count);
+      return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
+    }
+
+    function styleProvince(feature) {
+      const code = getProvinceCode(feature.properties);
+      const category = getCategory(code, true);
       const count = tripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
@@ -349,10 +357,9 @@ function generateMapHtml(data) {
       const props = feature.properties || {};
       let code, name;
       if (isProvince) {
-        code = props.iso_3166_2?.replace('CA-', '') || props.postal || props.name?.substring(0,2).toUpperCase();
+        code = getProvinceCode(props);
         name = provNames[code] || props.name || code;
       } else {
-        // Use feature.id for FIPS code (PublicaMundi GeoJSON stores it there)
         code = fipsToState[feature.id] || props.STUSPS || props.postal || '';
         name = stateNames[code] || props.name || props.NAME || code;
       }
@@ -376,7 +383,7 @@ function generateMapHtml(data) {
       .then(r => r.json())
       .then(data => {
         const layer = L.geoJson(data, {
-          style: f => style(f, false),
+          style: styleState,
           onEachFeature: (f, l) => {
             l.options.isProvince = false;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
@@ -388,7 +395,7 @@ function generateMapHtml(data) {
       .then(r => r.json())
       .then(data => {
         const layer = L.geoJson(data, {
-          style: f => style(f, true),
+          style: styleProvince,
           onEachFeature: (f, l) => {
             l.options.isProvince = true;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
@@ -438,7 +445,7 @@ function generateUsagePage() {
 
     <div class="card">
       <h2>Quick Example</h2>
-      <pre><code>https://travelmap.psiegel.org/?work=NY,CA,TX&personal=OH,HI&trips=NY:40,CA:9</code></pre>
+      <pre><code>https://travelmap.psiegel.org/?work=NY,CA,TX&amp;personal=OH,HI&amp;trips=NY:40,CA:9</code></pre>
     </div>
 
     <div class="card">
@@ -452,73 +459,6 @@ function generateUsagePage() {
         <tr><td><code>trips</code></td><td>Trip counts (for shading)</td><td>NY:40,CA:9,TX:17</td></tr>
         <tr><td><code>title</code></td><td>Custom map title</td><td>My Travel Map</td></tr>
       </table>
-    </div>
-
-    <div class="card">
-      <h2>Embed in MediaWiki</h2>
-      <p>Add this to your wiki page where you want the map. The script parses your trip tables automatically:</p>
-      <pre><code>&lt;html&gt;
-&lt;div id="travel-map-container"&gt;&lt;/div&gt;
-&lt;script&gt;
-(function() {
-  var stateCodes = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']);
-  var provCodes = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT']);
-
-  function extractLoc(text) {
-    if (!text) return null;
-    var prov = text.match(/,\\s*([A-Z]{2})\\s*,\\s*Canada/i);
-    if (prov && provCodes.has(prov[1].toUpperCase())) return { code: prov[1].toUpperCase(), isProv: true };
-    var st = text.match(/,\\s*([A-Z]{2})(?:\\s*$|[^a-zA-Z])/);
-    if (st && stateCodes.has(st[1])) return { code: st[1], isProv: false };
-    return null;
-  }
-
-  var work = {}, personal = {}, provs = {};
-
-  // Parse work tables (golive, immersion, adhoc)
-  document.querySelectorAll('.golive-table tr, .immersion-table tr').forEach(function(r) {
-    var c = r.querySelectorAll('td');
-    if (c.length >= 4) {
-      var res = extractLoc(c[c.length-1].textContent);
-      if (res) { if (res.isProv) provs[res.code] = (provs[res.code]||0)+1; else work[res.code] = (work[res.code]||0)+1; }
-    }
-  });
-  document.querySelectorAll('.adhoc-trip-table tr').forEach(function(r) {
-    var c = r.querySelectorAll('td');
-    if (c.length >= 4) {
-      var res = extractLoc(c[3].textContent);
-      if (res && !res.isProv) work[res.code] = (work[res.code]||0)+1;
-    }
-  });
-
-  // Parse personal trips
-  document.querySelectorAll('.personal-trips-table tr').forEach(function(r) {
-    var c = r.querySelectorAll('td');
-    if (c.length >= 1) {
-      var res = extractLoc(c[0].textContent);
-      if (res && !res.isProv) personal[res.code] = (personal[res.code]||0)+1;
-    }
-  });
-
-  // Build URL
-  var p = [], trips = {};
-  if (Object.keys(work).length) p.push('work=' + Object.keys(work).join(','));
-  if (Object.keys(personal).length) p.push('personal=' + Object.keys(personal).join(','));
-  if (Object.keys(provs).length) p.push('prov=' + Object.keys(provs).join(','));
-  for (var s in work) trips[s] = (trips[s]||0) + work[s];
-  for (var s in personal) trips[s] = (trips[s]||0) + personal[s];
-  for (var s in provs) trips[s] = (trips[s]||0) + provs[s];
-  var tp = []; for (var k in trips) tp.push(k+':'+trips[k]);
-  if (tp.length) p.push('trips=' + tp.join(','));
-  p.push('title=' + encodeURIComponent("Preston's Travel Map"));
-
-  var iframe = document.createElement('iframe');
-  iframe.src = 'https://travelmap.psiegel.org/?' + p.join('&amp;');
-  iframe.style.cssText = 'width:100%;height:650px;border:none;border-radius:12px;';
-  document.getElementById('travel-map-container').appendChild(iframe);
-})();
-&lt;/script&gt;
-&lt;/html&gt;</code></pre>
     </div>
 
     <div class="card">
