@@ -366,8 +366,9 @@ function generateMapHtml(data) {
 
     function getCountryCode(props) {
       // datasets/geo-countries uses ISO3166-1-Alpha-3
-      if (props['ISO3166-1-Alpha-3']) {
-        return props['ISO3166-1-Alpha-3'].toUpperCase();
+      var code = props['ISO3166-1-Alpha-3'];
+      if (code) {
+        return code.toUpperCase();
       }
       // Natural Earth GeoJSON uses ISO_A3 or ADM0_A3
       if (props.ISO_A3 && props.ISO_A3 !== '-99') {
@@ -379,6 +380,7 @@ function generateMapHtml(data) {
       if (props.iso_a3 && props.iso_a3 !== '-99') {
         return props.iso_a3.toUpperCase();
       }
+      console.log('Could not get country code for:', props);
       return null;
     }
 
@@ -538,16 +540,37 @@ function generateMapHtml(data) {
     fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
       .then(r => r.json())
       .then(data => {
+        console.log('Countries GeoJSON loaded, features count:', data.features.length);
+        
         // Filter out USA and Canada entirely - they're handled with states/provinces
         data.features = data.features.filter(f => {
           const code = getCountryCode(f.properties);
           return code !== 'USA' && code !== 'CAN';
         });
         
+        console.log('After filtering USA/CAN:', data.features.length);
+        console.log('personalCountries:', personalCountries);
+        console.log('workCountries:', workCountries);
+        
+        // Log Ireland specifically
+        const ireland = data.features.find(f => f.properties.name === 'Ireland');
+        if (ireland) {
+          console.log('Ireland props:', ireland.properties);
+          const code = getCountryCode(ireland.properties);
+          console.log('Ireland code:', code);
+          console.log('Ireland category:', getCategory(code, 'country'));
+        }
+        
         const layer = L.geoJson(data, {
-          style: styleCountry,
+          style: function(feature) {
+            const s = styleCountry(feature);
+            const code = getCountryCode(feature.properties);
+            if (code === 'IRL' || code === 'GBR') {
+              console.log('Styling', feature.properties.name, '- code:', code, 'style:', s);
+            }
+            return s;
+          },
           pane: 'countries',
-          interactive: false,  // Default to non-interactive
           onEachFeature: (f, l) => {
             const code = getCountryCode(f.properties);
             l.locationType = 'country';
@@ -555,11 +578,14 @@ function generateMapHtml(data) {
             // Only make visited countries interactive
             const category = getCategory(code, 'country');
             if (category !== 'unvisited') {
-              l.options.interactive = true;
               l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
             }
           }
         }).addTo(map);
+        
+        console.log('Countries layer added to map');
+      })
+      .catch(err => console.error('Error loading countries:', err));
       });
 
     fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
