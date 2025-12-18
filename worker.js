@@ -1,6 +1,6 @@
 /**
- * Travel Map API - Cloudflare Worker v2
- * Fixed province detection with name-to-code mapping
+ * Travel Map API - Cloudflare Worker v3
+ * Fixed province detection + work/personal trip breakdown
  */
 
 export default {
@@ -21,7 +21,8 @@ export default {
     const personalParam = url.searchParams.get('personal') || '';
     const provParam = url.searchParams.get('prov') || '';
     const provPersParam = url.searchParams.get('provPers') || '';
-    const tripsParam = url.searchParams.get('trips') || '';
+    const workTripsParam = url.searchParams.get('workTrips') || '';
+    const persTripsParam = url.searchParams.get('persTrips') || '';
     const title = url.searchParams.get('title') || 'Travel Map';
 
     const workStates = workParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
@@ -29,14 +30,35 @@ export default {
     const workProvinces = provParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
     const personalProvinces = provPersParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
 
-    const tripCounts = {};
-    if (tripsParam) {
-      tripsParam.split(',').forEach(pair => {
+    // Parse work trip counts
+    const workTripCounts = {};
+    if (workTripsParam) {
+      workTripsParam.split(',').forEach(pair => {
         const [code, count] = pair.split(':');
         if (code && count) {
-          tripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 1;
+          workTripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
         }
       });
+    }
+
+    // Parse personal trip counts
+    const persTripCounts = {};
+    if (persTripsParam) {
+      persTripsParam.split(',').forEach(pair => {
+        const [code, count] = pair.split(':');
+        if (code && count) {
+          persTripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
+        }
+      });
+    }
+
+    // Calculate total trip counts (for shading intensity)
+    const totalTripCounts = {};
+    for (const code of Object.keys(workTripCounts)) {
+      totalTripCounts[code] = (totalTripCounts[code] || 0) + workTripCounts[code];
+    }
+    for (const code of Object.keys(persTripCounts)) {
+      totalTripCounts[code] = (totalTripCounts[code] || 0) + persTripCounts[code];
     }
 
     const bothStates = workStates.filter(s => personalStates.includes(s));
@@ -48,7 +70,8 @@ export default {
 
     const mapHtml = generateMapHtml({
       workStates, personalStates, workProvinces, personalProvinces,
-      tripCounts, bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
+      workTripCounts, persTripCounts, totalTripCounts,
+      bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
     });
 
     return new Response(mapHtml, {
@@ -64,7 +87,8 @@ export default {
 function generateMapHtml(data) {
   const {
     workStates, personalStates, workProvinces, personalProvinces,
-    tripCounts, bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
+    workTripCounts, persTripCounts, totalTripCounts,
+    bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
   } = data;
 
   const stateNames = {
@@ -85,7 +109,7 @@ function generateMapHtml(data) {
     NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon'
   };
 
-  const maxTrips = Math.max(1, ...Object.values(tripCounts));
+  const maxTrips = Math.max(1, ...Object.values(totalTripCounts));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -181,6 +205,9 @@ function generateMapHtml(data) {
     .info-box h4 { margin: 0 0 4px 0; font-size: 15px; color: #2d3436; font-weight: 600; }
     .info-box .status { font-weight: 600; }
     .info-box .trips { color: #636e72; font-size: 12px; margin-top: 3px; }
+    .info-box .trip-breakdown { font-size: 11px; color: #888; margin-top: 2px; }
+    .info-box .trip-work { color: #ff9800; }
+    .info-box .trip-personal { color: #e91e63; }
     .leaflet-container { background: #b8d4e8; font-family: inherit; }
     .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.8) !important; }
     @media (max-width: 768px) {
@@ -228,7 +255,9 @@ function generateMapHtml(data) {
     const personalStates = ${JSON.stringify(personalStates)};
     const workProvinces = ${JSON.stringify(workProvinces)};
     const personalProvinces = ${JSON.stringify(personalProvinces)};
-    const tripCounts = ${JSON.stringify(tripCounts)};
+    const workTripCounts = ${JSON.stringify(workTripCounts)};
+    const persTripCounts = ${JSON.stringify(persTripCounts)};
+    const totalTripCounts = ${JSON.stringify(totalTripCounts)};
     const stateNames = ${JSON.stringify(stateNames)};
     const provNames = ${JSON.stringify(provNames)};
     const maxTrips = ${maxTrips};
@@ -277,11 +306,9 @@ function generateMapHtml(data) {
     }).addTo(map);
 
     function getProvinceCode(props) {
-      // The codeforamerica GeoJSON uses 'name' with full province names
       if (props.name && provNameToCode[props.name]) {
         return provNameToCode[props.name];
       }
-      // Fallback to other possible properties
       if (props.iso_3166_2) {
         return props.iso_3166_2.replace('CA-', '');
       }
@@ -322,7 +349,7 @@ function generateMapHtml(data) {
     function styleState(feature) {
       const code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
       const category = getCategory(code, false);
-      const count = tripCounts[code] || 0;
+      const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
     }
@@ -330,7 +357,7 @@ function generateMapHtml(data) {
     function styleProvince(feature) {
       const code = getProvinceCode(feature.properties);
       const category = getCategory(code, true);
-      const count = tripCounts[code] || 0;
+      const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
       return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
     }
@@ -364,7 +391,10 @@ function generateMapHtml(data) {
         name = stateNames[code] || props.name || props.NAME || code;
       }
       const category = getCategory(code, isProvince);
-      const count = tripCounts[code] || 0;
+      const workCount = workTripCounts[code] || 0;
+      const persCount = persTripCounts[code] || 0;
+      const totalCount = totalTripCounts[code] || 0;
+      
       let statusText, statusColor;
       switch(category) {
         case 'work': statusText = 'Work'; statusColor = '#ff9800'; break;
@@ -372,9 +402,29 @@ function generateMapHtml(data) {
         case 'both': statusText = 'Work + Personal'; statusColor = '#9c27b0'; break;
         default: statusText = 'Not visited'; statusColor = '#999';
       }
+      
       let html = '<h4>' + name + '</h4>';
       html += '<div class="status" style="color:' + statusColor + '">' + statusText + '</div>';
-      if (count > 0) html += '<div class="trips">' + count + ' trip' + (count > 1 ? 's' : '') + '</div>';
+      
+      if (totalCount > 0) {
+        html += '<div class="trips">' + totalCount + ' trip' + (totalCount > 1 ? 's' : '') + ' total</div>';
+        
+        // Show breakdown if there are trips
+        if (workCount > 0 || persCount > 0) {
+          html += '<div class="trip-breakdown">';
+          if (workCount > 0) {
+            html += '<span class="trip-work">' + workCount + ' work</span>';
+          }
+          if (workCount > 0 && persCount > 0) {
+            html += ' · ';
+          }
+          if (persCount > 0) {
+            html += '<span class="trip-personal">' + persCount + ' personal</span>';
+          }
+          html += '</div>';
+        }
+      }
+      
       this._div.innerHTML = html;
     };
     info.addTo(map);
@@ -445,7 +495,7 @@ function generateUsagePage() {
 
     <div class="card">
       <h2>Quick Example</h2>
-      <pre><code>https://travelmap.psiegel.org/?work=NY,CA,TX&amp;personal=OH,HI&amp;trips=NY:40,CA:9</code></pre>
+      <pre><code>https://travelmap.psiegel.org/?work=NY,CA,TX&amp;personal=OH,HI&amp;workTrips=NY:40,CA:9&amp;persTrips=OH:3,HI:2</code></pre>
     </div>
 
     <div class="card">
@@ -456,7 +506,8 @@ function generateUsagePage() {
         <tr><td><code>personal</code></td><td>States visited personally</td><td>OH,HI,MI</td></tr>
         <tr><td><code>prov</code></td><td>Canadian provinces (work)</td><td>ON,BC,NL</td></tr>
         <tr><td><code>provPers</code></td><td>Canadian provinces (personal)</td><td>QC,AB</td></tr>
-        <tr><td><code>trips</code></td><td>Trip counts (for shading)</td><td>NY:40,CA:9,TX:17</td></tr>
+        <tr><td><code>workTrips</code></td><td>Work trip counts</td><td>NY:40,CA:9,TX:17</td></tr>
+        <tr><td><code>persTrips</code></td><td>Personal trip counts</td><td>OH:3,HI:2,MI:1</td></tr>
         <tr><td><code>title</code></td><td>Custom map title</td><td>My Travel Map</td></tr>
       </table>
     </div>
@@ -465,8 +516,9 @@ function generateUsagePage() {
       <h2>Features</h2>
       <p>• Accurate US state and Canadian province borders using Leaflet + GeoJSON</p>
       <p>• Color coding: Work (orange), Personal (pink), Both (purple)</p>
-      <p>• Intensity shading based on trip count</p>
-      <p>• Interactive hover tooltips and zoom</p>
+      <p>• Intensity shading based on total trip count</p>
+      <p>• Hover tooltip shows work/personal trip breakdown</p>
+      <p>• Interactive zoom on click</p>
     </div>
   </div>
 </body>
