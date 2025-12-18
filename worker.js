@@ -433,14 +433,10 @@ function generateMapHtml(data) {
 
     function styleCountry(feature) {
       const code = getCountryCode(feature.properties);
-      // Skip USA and Canada completely - they're handled with states/provinces
-      if (code === 'USA' || code === 'CAN') {
-        return { fillColor: 'transparent', fillOpacity: 0, weight: 0, opacity: 0, stroke: false, interactive: false };
-      }
       const category = getCategory(code, 'country');
-      // Only style visited countries
+      // Unvisited countries get minimal styling
       if (category === 'unvisited') {
-        return { fillColor: '#dfe6e9', fillOpacity: 0.3, weight: 0.5, opacity: 0.5, color: '#ccc' };
+        return { fillColor: '#dfe6e9', fillOpacity: 0.3, weight: 0.5, opacity: 0.3, color: '#ccc' };
       }
       const count = totalTripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
@@ -538,16 +534,24 @@ function generateMapHtml(data) {
     fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
       .then(r => r.json())
       .then(data => {
+        // Filter out USA and Canada entirely - they're handled with states/provinces
+        data.features = data.features.filter(f => {
+          const code = getCountryCode(f.properties);
+          return code !== 'USA' && code !== 'CAN';
+        });
+        
         const layer = L.geoJson(data, {
           style: styleCountry,
           pane: 'countries',
+          interactive: false,  // Default to non-interactive
           onEachFeature: (f, l) => {
             const code = getCountryCode(f.properties);
             l.locationType = 'country';
             l.locationCode = code;
-            // Only add interactivity for visited countries (not USA/CAN/unvisited)
+            // Only make visited countries interactive
             const category = getCategory(code, 'country');
-            if (code !== 'USA' && code !== 'CAN' && category !== 'unvisited') {
+            if (category !== 'unvisited') {
+              l.options.interactive = true;
               l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
             }
           }
