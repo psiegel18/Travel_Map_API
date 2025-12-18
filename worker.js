@@ -364,7 +364,11 @@ function generateMapHtml(data) {
       return null;
     }
 
-    function getCountryCode(props) {
+    function getCountryCode(props, featureId) {
+      // johan/world.geo.json uses feature id
+      if (featureId && featureId.length === 3) {
+        return featureId.toUpperCase();
+      }
       // datasets/geo-countries uses ISO3166-1-Alpha-3
       var code = props['ISO3166-1-Alpha-3'];
       if (code) {
@@ -380,7 +384,6 @@ function generateMapHtml(data) {
       if (props.iso_a3 && props.iso_a3 !== '-99') {
         return props.iso_a3.toUpperCase();
       }
-      console.log('Could not get country code for:', props);
       return null;
     }
 
@@ -438,7 +441,7 @@ function generateMapHtml(data) {
     }
 
     function styleCountry(feature) {
-      const code = getCountryCode(feature.properties);
+      const code = getCountryCode(feature.properties, feature.id);
       const category = getCategory(code, 'country');
       // Unvisited countries get minimal styling
       if (category === 'unvisited') {
@@ -473,12 +476,16 @@ function generateMapHtml(data) {
         return;
       }
       const props = feature.properties || {};
+      const featureId = feature.id;
       let code, name;
       
       // Detect location type - check for country first, then province, then state
       var detectedType = locationType;
       if (!detectedType) {
-        if (props['ISO3166-1-Alpha-3'] || props.ISO_A3 || props.ADM0_A3) {
+        // Check if feature.id is a 3-letter country code
+        if (featureId && typeof featureId === 'string' && featureId.length === 3) {
+          detectedType = 'country';
+        } else if (props['ISO3166-1-Alpha-3'] || props.ISO_A3 || props.ADM0_A3) {
           detectedType = 'country';
         } else if (props.name && provNameToCode[props.name]) {
           detectedType = 'province';
@@ -488,7 +495,7 @@ function generateMapHtml(data) {
       }
       
       if (detectedType === 'country') {
-        code = getCountryCode(props);
+        code = getCountryCode(props, featureId);
         name = countryNames[code] || props.name || props.NAME || props.ADMIN || code;
       } else if (detectedType === 'province') {
         code = getProvinceCode(props);
@@ -536,43 +543,23 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
-    // Fetch countries first (renders in background pane)
-    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+    // Fetch countries (using simplified GeoJSON - only 257KB vs 14.6MB)
+    fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
       .then(r => r.json())
       .then(data => {
-        console.log('Countries GeoJSON loaded, features count:', data.features.length);
-        
         // Filter out USA and Canada entirely - they're handled with states/provinces
         data.features = data.features.filter(f => {
-          const code = getCountryCode(f.properties);
+          const code = getCountryCode(f.properties, f.id);
           return code !== 'USA' && code !== 'CAN';
         });
         
-        console.log('After filtering USA/CAN:', data.features.length);
-        console.log('personalCountries:', personalCountries);
-        console.log('workCountries:', workCountries);
-        
-        // Log Ireland specifically
-        const ireland = data.features.find(f => f.properties.name === 'Ireland');
-        if (ireland) {
-          console.log('Ireland props:', ireland.properties);
-          const code = getCountryCode(ireland.properties);
-          console.log('Ireland code:', code);
-          console.log('Ireland category:', getCategory(code, 'country'));
-        }
-        
         const layer = L.geoJson(data, {
           style: function(feature) {
-            const s = styleCountry(feature);
-            const code = getCountryCode(feature.properties);
-            if (code === 'IRL' || code === 'GBR') {
-              console.log('Styling', feature.properties.name, '- code:', code, 'style:', s);
-            }
-            return s;
+            return styleCountry(feature);
           },
           pane: 'countries',
           onEachFeature: (f, l) => {
-            const code = getCountryCode(f.properties);
+            const code = getCountryCode(f.properties, f.id);
             l.locationType = 'country';
             l.locationCode = code;
             // Only make visited countries interactive
@@ -582,8 +569,6 @@ function generateMapHtml(data) {
             }
           }
         }).addTo(map);
-        
-        console.log('Countries layer added to map');
       })
       .catch(err => console.error('Error loading countries:', err));
       });
