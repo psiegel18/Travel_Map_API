@@ -330,7 +330,7 @@ function generateMapHtml(data) {
     function highlightFeature(e) {
       e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.9 });
       e.target.bringToFront();
-      info.update(e.target.feature.properties, e.target.options.isProvince);
+      info.update(e.target.feature, e.target.options.isProvince);
     }
 
     function resetHighlight(e, layer) { layer.resetStyle(e.target); info.update(); }
@@ -341,17 +341,19 @@ function generateMapHtml(data) {
       this.update();
       return this._div;
     };
-    info.update = function(props, isProvince) {
-      if (!props) {
+    info.update = function(feature, isProvince) {
+      if (!feature) {
         this._div.innerHTML = '<h4>Hover over a state</h4><div class="trips">to see details</div>';
         return;
       }
+      const props = feature.properties || {};
       let code, name;
       if (isProvince) {
         code = props.iso_3166_2?.replace('CA-', '') || props.postal || props.name?.substring(0,2).toUpperCase();
         name = provNames[code] || props.name || code;
       } else {
-        code = fipsToState[props.STATE] || props.STUSPS || props.postal || '';
+        // Use feature.id for FIPS code (PublicaMundi GeoJSON stores it there)
+        code = fipsToState[feature.id] || props.STUSPS || props.postal || '';
         name = stateNames[code] || props.name || props.NAME || code;
       }
       const category = getCategory(code, isProvince);
