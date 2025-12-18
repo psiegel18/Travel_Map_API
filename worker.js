@@ -571,7 +571,6 @@ function generateMapHtml(data) {
         }).addTo(map);
       })
       .catch(err => console.error('Error loading countries:', err));
-      });
 
     fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
       .then(r => r.json())
