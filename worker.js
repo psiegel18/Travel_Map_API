@@ -120,32 +120,33 @@ function generateMapHtml(data) {
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      min-height: 100vh;
-      padding: 16px;
+      height: 100vh;
+      padding: 10px 16px;
     }
-    .container { max-width: 1400px; margin: 0 auto; }
+    .container { max-width: 1400px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; }
     h1 {
       text-align: center;
       color: #fff;
-      font-size: 1.8rem;
+      font-size: 1.6rem;
       font-weight: 700;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
       text-shadow: 0 2px 15px rgba(0,0,0,0.3);
     }
     .subtitle {
       text-align: center;
       color: rgba(255,255,255,0.7);
-      font-size: 0.9rem;
-      margin-bottom: 16px;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
     }
     .legend {
       display: flex;
       justify-content: center;
       gap: 20px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       flex-wrap: wrap;
     }
     .legend-item {
@@ -153,12 +154,12 @@ function generateMapHtml(data) {
       align-items: center;
       gap: 8px;
       color: rgba(255,255,255,0.9);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
     }
     .legend-swatch {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       border-radius: 4px;
       border: 2px solid rgba(255,255,255,0.3);
     }
@@ -171,53 +172,56 @@ function generateMapHtml(data) {
       border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
-    #map { width: 100%; height: 520px; }
+    #map { width: 100%; flex: 1; min-height: 0; }
     .stats {
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
-      padding: 14px 16px;
+      padding: 10px 16px;
       background: #f8f9fa;
       border-top: 1px solid #eee;
-      font-size: 14px;
+      font-size: 13px;
       color: #555;
     }
     .stat-item { display: flex; align-items: center; gap: 5px; }
-    .stat-number { font-size: 1.3rem; font-weight: 700; color: #2d3436; }
+    .stat-number { font-size: 1.2rem; font-weight: 700; color: #2d3436; }
     .stat-label { color: #636e72; }
     .stat-work { color: #ff9800; font-weight: 600; }
     .stat-personal { color: #e91e63; font-weight: 600; }
     .stat-both { color: #9c27b0; font-weight: 600; }
     .stat-prov { color: #00bcd4; font-weight: 600; }
-    .stat-divider { width: 1px; height: 20px; background: #ddd; }
+    .stat-divider { width: 1px; height: 18px; background: #ddd; }
     .info-box {
-      padding: 10px 14px;
+      padding: 8px 12px;
       background: white;
       border-radius: 8px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-      font-size: 13px;
-      line-height: 1.5;
-      min-width: 180px;
+      font-size: 12px;
+      line-height: 1.4;
+      min-width: 160px;
     }
-    .info-box h4 { margin: 0 0 4px 0; font-size: 15px; color: #2d3436; font-weight: 600; }
+    .info-box h4 { margin: 0 0 3px 0; font-size: 14px; color: #2d3436; font-weight: 600; }
     .info-box .status { font-weight: 600; }
-    .info-box .trips { color: #636e72; font-size: 12px; margin-top: 3px; }
-    .info-box .trip-breakdown { font-size: 11px; color: #888; margin-top: 2px; }
+    .info-box .trips { color: #636e72; font-size: 11px; margin-top: 2px; }
+    .info-box .trip-breakdown { font-size: 10px; color: #888; margin-top: 2px; }
     .info-box .trip-work { color: #ff9800; }
     .info-box .trip-personal { color: #e91e63; }
     .leaflet-container { background: #b8d4e8; font-family: inherit; }
     .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.8) !important; }
     @media (max-width: 768px) {
-      body { padding: 10px; }
-      h1 { font-size: 1.4rem; }
-      .legend { gap: 10px; }
-      .legend-item { font-size: 11px; }
-      #map { height: 400px; }
-      .stats { gap: 10px; font-size: 12px; padding: 10px; }
-      .stat-number { font-size: 1.1rem; }
+      body { padding: 8px; }
+      h1 { font-size: 1.3rem; }
+      .legend { gap: 8px; }
+      .legend-item { font-size: 10px; }
+      .stats { gap: 8px; font-size: 11px; padding: 8px; }
+      .stat-number { font-size: 1rem; }
     }
   </style>
 </head>
