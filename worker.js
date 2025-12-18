@@ -369,7 +369,7 @@ function generateMapHtml(data) {
     function highlightFeature(e) {
       e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.9 });
       e.target.bringToFront();
-      info.update(e.target.feature, e.target.options.isProvince);
+      info.update(e.target.feature, e.target.isProvince);
     }
 
     function resetHighlight(e, layer) { layer.resetStyle(e.target); info.update(); }
@@ -387,14 +387,19 @@ function generateMapHtml(data) {
       }
       const props = feature.properties || {};
       let code, name;
-      if (isProvince) {
+      
+      // Detect if this is a province by checking if name exists in provNameToCode
+      // This is a fallback in case isProvince flag isn't set correctly
+      var detectedProvince = isProvince || (props.name && provNameToCode[props.name]);
+      
+      if (detectedProvince) {
         code = getProvinceCode(props);
         name = provNames[code] || props.name || code;
       } else {
         code = fipsToState[feature.id] || props.STUSPS || props.postal || '';
         name = stateNames[code] || props.name || props.NAME || code;
       }
-      const category = getCategory(code, isProvince);
+      const category = getCategory(code, detectedProvince);
       const workCount = workTripCounts[code] || 0;
       const persCount = persTripCounts[code] || 0;
       const totalCount = totalTripCounts[code] || 0;
@@ -439,7 +444,7 @@ function generateMapHtml(data) {
         const layer = L.geoJson(data, {
           style: styleState,
           onEachFeature: (f, l) => {
-            l.options.isProvince = false;
+            l.isProvince = false;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
@@ -451,7 +456,7 @@ function generateMapHtml(data) {
         const layer = L.geoJson(data, {
           style: styleProvince,
           onEachFeature: (f, l) => {
-            l.options.isProvince = true;
+            l.isProvince = true;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
