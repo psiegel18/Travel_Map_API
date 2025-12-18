@@ -365,7 +365,11 @@ function generateMapHtml(data) {
     }
 
     function getCountryCode(props) {
-      // Natural Earth GeoJSON uses ISO_A3 or ADM0_A3 for 3-letter codes
+      // datasets/geo-countries uses ISO3166-1-Alpha-3
+      if (props['ISO3166-1-Alpha-3']) {
+        return props['ISO3166-1-Alpha-3'].toUpperCase();
+      }
+      // Natural Earth GeoJSON uses ISO_A3 or ADM0_A3
       if (props.ISO_A3 && props.ISO_A3 !== '-99') {
         return props.ISO_A3.toUpperCase();
       }
@@ -472,7 +476,7 @@ function generateMapHtml(data) {
       // Detect location type - check for country first, then province, then state
       var detectedType = locationType;
       if (!detectedType) {
-        if (props.ISO_A3 || props.ADM0_A3) {
+        if (props['ISO3166-1-Alpha-3'] || props.ISO_A3 || props.ADM0_A3) {
           detectedType = 'country';
         } else if (props.name && provNameToCode[props.name]) {
           detectedType = 'province';
@@ -483,7 +487,7 @@ function generateMapHtml(data) {
       
       if (detectedType === 'country') {
         code = getCountryCode(props);
-        name = countryNames[code] || props.NAME || props.name || props.ADMIN || code;
+        name = countryNames[code] || props.name || props.NAME || props.ADMIN || code;
       } else if (detectedType === 'province') {
         code = getProvinceCode(props);
         name = provNames[code] || props.name || code;
