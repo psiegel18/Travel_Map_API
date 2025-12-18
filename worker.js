@@ -133,7 +133,8 @@ function generateMapHtml(data) {
     PRI:'Puerto Rico',ROU:'Romania',RUS:'Russia',SGP:'Singapore',SVK:'Slovakia',
     SVN:'Slovenia',ZAF:'South Africa',KOR:'South Korea',ESP:'Spain',SWE:'Sweden',
     CHE:'Switzerland',TWN:'Taiwan',THA:'Thailand',TUR:'Turkey',GBR:'United Kingdom',
-    UKR:'Ukraine',URY:'Uruguay',VAT:'Vatican City',VEN:'Venezuela',VNM:'Vietnam'
+    UKR:'Ukraine',URY:'Uruguay',VAT:'Vatican City',VEN:'Venezuela',VNM:'Vietnam',
+    ENG:'England',SCT:'Scotland',WLS:'Wales',NIR:'Northern Ireland'
   };
 
   const maxTrips = Math.max(1, ...Object.values(totalTripCounts));
@@ -365,8 +366,12 @@ function generateMapHtml(data) {
     }
 
     function getCountryCode(props, featureId) {
+      // Natural Earth map_units uses GU_A3 (3-letter geo unit code)
+      if (props.GU_A3) {
+        return props.GU_A3.toUpperCase();
+      }
       // johan/world.geo.json uses feature id
-      if (featureId && featureId.length === 3) {
+      if (featureId && typeof featureId === 'string' && featureId.length === 3) {
         return featureId.toUpperCase();
       }
       // datasets/geo-countries uses ISO3166-1-Alpha-3
@@ -482,8 +487,11 @@ function generateMapHtml(data) {
       // Detect location type - check for country first, then province, then state
       var detectedType = locationType;
       if (!detectedType) {
+        // Check for Natural Earth map_units GU_A3
+        if (props.GU_A3) {
+          detectedType = 'country';
         // Check if feature.id is a 3-letter country code
-        if (featureId && typeof featureId === 'string' && featureId.length === 3) {
+        } else if (featureId && typeof featureId === 'string' && featureId.length === 3) {
           detectedType = 'country';
         } else if (props['ISO3166-1-Alpha-3'] || props.ISO_A3 || props.ADM0_A3) {
           detectedType = 'country';
@@ -496,7 +504,7 @@ function generateMapHtml(data) {
       
       if (detectedType === 'country') {
         code = getCountryCode(props, featureId);
-        name = countryNames[code] || props.name || props.NAME || props.ADMIN || code;
+        name = countryNames[code] || props.GEOUNIT || props.NAME || props.name || props.ADMIN || code;
       } else if (detectedType === 'province') {
         code = getProvinceCode(props);
         name = provNames[code] || props.name || code;
@@ -543,8 +551,8 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
-    // Fetch countries (using simplified GeoJSON - only 257KB vs 14.6MB)
-    fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+    // Fetch countries (Natural Earth map_units - includes UK subdivisions)
+    fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_map_units.geojson')
       .then(r => r.json())
       .then(data => {
         // Filter out USA and Canada entirely - they're handled with states/provinces
