@@ -1,419 +1,236 @@
 /**
- * Preston's Travel Map - Cloudflare Worker
- * Professional map using Leaflet.js with accurate GeoJSON boundaries
+ * Travel Map API - Cloudflare Worker
+ * Renders travel maps from URL parameters (for internal wiki embedding)
  *
- * Deployed to: https://travelmap.psiegel.org/
- * Data source: Wiki Travel @ Epic: Master List
+ * Usage:
+ *   ?work=NY,CA,TX&personal=OH,HI&prov=NL&trips=NY:40,CA:9,TX:17
+ *
+ * Parameters:
+ *   work     - Comma-separated state codes visited for work
+ *   personal - Comma-separated state codes visited personally
+ *   prov     - Comma-separated Canadian province codes (work)
+ *   provPers - Comma-separated Canadian province codes (personal)
+ *   trips    - Trip counts as STATE:COUNT pairs (e.g., NY:40,CA:9)
+ *   title    - Optional custom title for the map
  */
 
 export default {
   async fetch(request) {
-    // ============================================
-    // TRIP DATA - Extracted from Wiki
-    // ============================================
+    const url = new URL(request.url);
 
-    // Work trips by state (Go-Lives, Customer Trips, Immersion)
-    const workTrips = {
-      // Go-Live Floor Support
-      NC: [
-        { date: '2022-08-07', type: 'Go-Live', customer: 'Atrium Health', city: 'Charlotte' },
-        { date: '2025-08-07', type: 'Go-Live CC', customer: 'NC DHHS', city: 'Raleigh' },
-        { date: '2025-02-17', type: 'Customer', customer: 'CarolinaEast', city: 'New Bern' },
-      ],
-      GA: [
-        { date: '2022-09-30', type: 'Go-Live', customer: 'Emory Healthcare', city: 'Atlanta' },
-      ],
-      WI: [
-        { date: '2022-10-21', type: 'Go-Live', customer: 'Ascension Health', city: 'Appleton' },
-      ],
-      OK: [
-        { date: '2023-06-02', type: 'Go-Live', customer: 'OU Health', city: 'Oklahoma City' },
-        { date: '2025-04-09', type: 'Go-Live', customer: 'Choctaw Nation', city: 'Durant' },
-      ],
-      OR: [
-        { date: '2024-04-15', type: 'Go-Live', customer: 'Kaiser Permanente', city: 'Portland' },
-      ],
-      MA: [
-        { date: '2024-06-07', type: 'Go-Live', customer: 'Beth Israel Lahey', city: 'Boston' },
-      ],
-      TX: [
-        { date: '2024-10-09', type: 'Go-Live', customer: 'Memorial Hermann', city: 'Houston' },
-        { date: '2025-01-13', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-02-03', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-03-03', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-03-31', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-04-21', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-07-07', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-08-03', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-09-08', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-09-29', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-10-20', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-11-17', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2025-12-15', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2026-01-19', type: 'Customer', customer: 'UMC Health', city: 'Lubbock' },
-        { date: '2026-02-19', type: 'Go-Live CC', customer: 'UMC Health', city: 'Lubbock' },
-      ],
-      NY: [
-        { date: '2025-01-31', type: 'Go-Live', customer: 'Memorial Sloan Kettering', city: 'NYC' },
-        { date: '2023-08-06', type: 'Go-Live CC', customer: 'Mount Sinai', city: 'NYC' },
-        { date: '2022-09-19', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2022-10-31', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2022-11-14', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2022-12-05', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-01-16', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-01-31', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-02-20', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-03-14', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-03-27', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-04-24', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-05-22', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-06-12', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-06-26', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-07-10', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-07-31', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-08-28', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-10-02', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-10-23', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-11-06', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2023-12-04', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-01-07', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-01-22', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-02-05', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-02-29', type: 'Go-Live CC', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-03-25', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-04-01', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-05-20', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-06-10', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-07-08', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-08-05', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-09-09', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-09-30', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-10-31', type: 'Go-Live CC', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-12-02', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2024-12-16', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2025-01-20', type: 'Customer', customer: 'Albany Med', city: 'Albany' },
-        { date: '2025-03-27', type: 'Go-Live CC', customer: 'Xtensys', city: 'Ithaca' },
-      ],
-      FL: [
-        { date: '2025-02-28', type: 'Go-Live', customer: 'Tallahassee Memorial', city: 'Tallahassee' },
-        { date: '2026-01-30', type: 'Go-Live', customer: 'Halifax Hospital', city: 'Orlando' },
-        { date: '2026-02-09', type: 'Customer', customer: 'Nicklaus Children\'s', city: 'Miami' },
-        { date: '2026-03-16', type: 'Customer', customer: 'Nicklaus Children\'s', city: 'Miami' },
-      ],
-      AR: [
-        { date: '2025-09-26', type: 'Go-Live', customer: 'Washington Regional', city: 'Fayetteville' },
-      ],
-      RI: [
-        { date: '2025-10-03', type: 'Go-Live', customer: 'Care New England', city: 'Providence' },
-      ],
-      DE: [
-        { date: '2025-10-31', type: 'Go-Live', customer: 'Beebe Healthcare', city: 'Dover' },
-      ],
-      IL: [
-        { date: '2026-03-20', type: 'Go-Live', customer: 'Blessing Health', city: 'Quincy' },
-      ],
-      AL: [
-        { date: '2026-07-29', type: 'Go-Live', customer: 'UAB Medicine', city: 'Birmingham' },
-      ],
-      OH: [
-        { date: '2023-10-06', type: 'Go-Live CC', customer: 'UH-Cleveland', city: 'Cleveland' },
-        { date: '2024-10-04', type: 'Go-Live CC', customer: 'Ohio DMHAS', city: 'Columbus' },
-      ],
-      CA: [
-        { date: '2024-11-18', type: 'Customer', customer: 'NEMS', city: 'San Francisco' },
-        { date: '2024-12-09', type: 'Customer', customer: 'NEMS', city: 'San Francisco' },
-        { date: '2025-01-06', type: 'Go-Live CC', customer: 'NEMS', city: 'San Francisco' },
-        { date: '2025-03-17', type: 'Customer', customer: 'NEMS', city: 'San Francisco' },
-        { date: '2025-07-21', type: 'Customer', customer: 'NEMS', city: 'San Francisco' },
-      ],
-      CT: [
-        { date: '2025-03-07', type: 'Go-Live CC', customer: 'Stamford Health', city: 'Stamford' },
-      ],
-      PA: [
-        { date: '2026-05-08', type: 'Go-Live CC', customer: 'UPMC Enterprise', city: 'Pittsburgh' },
-        { date: '2026-06-04', type: 'Go-Live CC', customer: 'Mount Nittany', city: 'State College' },
-      ],
-      SC: [
-        { date: '2022-09-06', type: 'Immersion', customer: 'McLeod Health', city: 'Florence' },
-      ],
-    };
+    // Check if any data parameters provided
+    const hasData = url.searchParams.has('work') ||
+                    url.searchParams.has('personal') ||
+                    url.searchParams.has('prov');
 
-    // Canadian provinces visited for work
-    const workProvinceTrips = {
-      NL: [
-        { date: '2026-04-23', type: 'Go-Live', customer: 'NL Health Services', city: "St. John's" },
-      ],
-    };
+    if (!hasData) {
+      return new Response(generateUsagePage(), {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+      });
+    }
 
-    // Personal trips by state
-    const personalTrips = {
-      CA: [
-        { date: '2022-08-19', destination: 'San Francisco', reason: 'Visiting Family' },
-        { date: '2025-01-12', destination: 'Muir Woods & Bodega Bay', reason: 'Nature' },
-        { date: '2025-03-21', destination: 'San Francisco', reason: 'Visiting Family' },
-        { date: '2026-02-13', destination: 'San Francisco', reason: 'Visiting Family' },
-      ],
-      OH: [
-        { date: '2022-09-09', destination: 'Columbus', reason: 'Football' },
-        { date: '2024-10-08', destination: 'Columbus', reason: 'Alma Mater Visit' },
-        { date: '2025-12-11', destination: 'Cleveland', reason: "Friend's Wedding" },
-      ],
-      MI: [
-        { date: '2022-11-11', destination: 'Detroit', reason: 'Visiting Family' },
-      ],
-      HI: [
-        { date: '2023-12-09', destination: 'Honolulu', reason: 'Nature & Culture' },
-        { date: '2025-12-02', destination: 'Oahu', reason: 'Nature & Culture' },
-        { date: '2025-12-04', destination: 'Hawaii Island', reason: 'Nature & Culture' },
-        { date: '2025-12-07', destination: 'Maui', reason: 'Nature & Culture' },
-      ],
-      MA: [
-        { date: '2024-03-10', destination: 'Boston', reason: 'Nature & Culture' },
-      ],
-      PA: [
-        { date: '2024-03-29', destination: 'Philadelphia', reason: 'Nature & Culture' },
-      ],
-      NJ: [
-        { date: '2024-03-31', destination: 'Atlantic City', reason: 'Visiting Family' },
-      ],
-      AZ: [
-        { date: '2024-05-18', destination: 'Phoenix', reason: 'Visiting Family & Nature' },
-      ],
-      TX: [
-        { date: '2024-10-13', destination: 'Houston', reason: 'Visiting Family' },
-        { date: '2025-02-15', destination: 'Austin & Houston', reason: 'Visiting Family' },
-      ],
-      IN: [
-        { date: '2025-08-29', destination: 'Indianapolis', reason: "Friend's Wedding" },
-      ],
-      NV: [
-        { date: '2026-05-28', destination: 'Las Vegas', reason: 'Visiting Family' },
-      ],
-    };
+    // Parse parameters
+    const workParam = url.searchParams.get('work') || '';
+    const personalParam = url.searchParams.get('personal') || '';
+    const provParam = url.searchParams.get('prov') || '';
+    const provPersParam = url.searchParams.get('provPers') || '';
+    const tripsParam = url.searchParams.get('trips') || '';
+    const title = url.searchParams.get('title') || 'Travel Map';
 
-    // ============================================
+    // Parse state lists
+    const workStates = workParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
+    const personalStates = personalParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
+    const workProvinces = provParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
+    const personalProvinces = provPersParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
+
+    // Parse trip counts: "NY:40,CA:9,TX:17"
+    const tripCounts = {};
+    if (tripsParam) {
+      tripsParam.split(',').forEach(pair => {
+        const [code, count] = pair.split(':');
+        if (code && count) {
+          tripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 1;
+        }
+      });
+    }
+
     // Calculate statistics
-    // ============================================
-    const workStates = Object.keys(workTrips);
-    const personalStates = Object.keys(personalTrips);
-    const workProvinces = Object.keys(workProvinceTrips);
-
-    // States visited for both work and personal
     const bothStates = workStates.filter(s => personalStates.includes(s));
     const workOnly = workStates.filter(s => !personalStates.includes(s));
     const personalOnly = personalStates.filter(s => !workStates.includes(s));
+    const allStates = [...new Set([...workStates, ...personalStates])];
+    const allProvinces = [...new Set([...workProvinces, ...personalProvinces])];
+    const pct = allStates.length > 0 ? Math.round(allStates.length / 50 * 100) : 0;
 
-    // All unique states
-    const allStatesSet = new Set([...workStates, ...personalStates]);
-    const allStates = Array.from(allStatesSet);
-    const pct = Math.round(allStates.length / 50 * 100);
+    // Generate map HTML
+    const mapHtml = generateMapHtml({
+      workStates,
+      personalStates,
+      workProvinces,
+      personalProvinces,
+      tripCounts,
+      bothStates,
+      workOnly,
+      personalOnly,
+      allStates,
+      allProvinces,
+      pct,
+      title
+    });
 
-    // Trip counts per state (for shading intensity)
-    const tripCounts = {};
-    for (const [state, trips] of Object.entries(workTrips)) {
-      tripCounts[state] = (tripCounts[state] || 0) + trips.length;
-    }
-    for (const [state, trips] of Object.entries(personalTrips)) {
-      tripCounts[state] = (tripCounts[state] || 0) + trips.length;
-    }
+    return new Response(mapHtml, {
+      headers: {
+        'Content-Type': 'text/html;charset=UTF-8',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600'
+      }
+    });
+  }
+};
 
-    // Province trip counts
-    const provTripCounts = {};
-    for (const [prov, trips] of Object.entries(workProvinceTrips)) {
-      provTripCounts[prov] = trips.length;
-    }
+function generateMapHtml(data) {
+  const {
+    workStates, personalStates, workProvinces, personalProvinces,
+    tripCounts, bothStates, workOnly, personalOnly, allStates, allProvinces, pct, title
+  } = data;
 
-    // State name mappings
-    const stateNames = {
-      AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',
-      CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',
-      IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',
-      ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',
-      MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
-      NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',
-      OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
-      TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
-      WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'Washington D.C.'
-    };
+  const stateNames = {
+    AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',
+    CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',
+    IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',
+    ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',
+    MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+    NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',
+    OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
+    TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
+    WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'Washington D.C.'
+  };
 
-    const provNames = {
-      AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',
-      NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',
-      NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon'
-    };
+  const provNames = {
+    AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',
+    NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',
+    NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon'
+  };
 
-    const html = `<!DOCTYPE html>
+  const maxTrips = Math.max(1, ...Object.values(tripCounts));
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Preston's Travel Map</title>
+  <title>${title}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
       min-height: 100vh;
-      padding: 20px;
+      padding: 16px;
     }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-
+    .container { max-width: 1400px; margin: 0 auto; }
     h1 {
       text-align: center;
       color: #fff;
-      font-size: 2.2rem;
+      font-size: 1.8rem;
       font-weight: 700;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       text-shadow: 0 2px 15px rgba(0,0,0,0.3);
-      letter-spacing: -0.5px;
     }
-
     .subtitle {
       text-align: center;
       color: rgba(255,255,255,0.7);
-      font-size: 1rem;
-      margin-bottom: 20px;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
     }
-
     .legend {
       display: flex;
       justify-content: center;
-      gap: 28px;
-      margin-bottom: 18px;
+      gap: 20px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
     }
-
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       color: rgba(255,255,255,0.9);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
     }
-
     .legend-swatch {
-      width: 22px;
-      height: 22px;
-      border-radius: 5px;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
       border: 2px solid rgba(255,255,255,0.3);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
-
     .swatch-work { background: #ff9800; }
     .swatch-personal { background: #e91e63; }
     .swatch-both { background: linear-gradient(135deg, #ff9800 50%, #e91e63 50%); }
     .swatch-unvisited { background: #dfe6e9; }
-
     .map-container {
       background: #fff;
-      border-radius: 16px;
+      border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
     }
-
-    #map {
-      width: 100%;
-      height: 620px;
-    }
-
+    #map { width: 100%; height: 520px; }
     .stats {
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
       flex-wrap: wrap;
-      padding: 18px 20px;
-      background: linear-gradient(90deg, #f8f9fa 0%, #fff 50%, #f8f9fa 100%);
+      padding: 14px 16px;
+      background: #f8f9fa;
       border-top: 1px solid #eee;
-      font-size: 15px;
+      font-size: 14px;
       color: #555;
     }
-
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .stat-number {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: #2d3436;
-    }
-
+    .stat-item { display: flex; align-items: center; gap: 5px; }
+    .stat-number { font-size: 1.3rem; font-weight: 700; color: #2d3436; }
     .stat-label { color: #636e72; }
     .stat-work { color: #ff9800; font-weight: 600; }
     .stat-personal { color: #e91e63; font-weight: 600; }
     .stat-both { color: #9c27b0; font-weight: 600; }
     .stat-prov { color: #00bcd4; font-weight: 600; }
-
-    .stat-divider {
-      width: 1px;
-      height: 24px;
-      background: #ddd;
-    }
-
+    .stat-divider { width: 1px; height: 20px; background: #ddd; }
     .info-box {
-      padding: 12px 16px;
+      padding: 10px 14px;
       background: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-      font-size: 14px;
-      line-height: 1.6;
-      min-width: 200px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      font-size: 13px;
+      line-height: 1.5;
+      min-width: 180px;
     }
-
-    .info-box h4 {
-      margin: 0 0 6px 0;
-      font-size: 16px;
-      color: #2d3436;
-      font-weight: 600;
-    }
-
+    .info-box h4 { margin: 0 0 4px 0; font-size: 15px; color: #2d3436; font-weight: 600; }
     .info-box .status { font-weight: 600; }
-    .info-box .trips { color: #636e72; font-size: 13px; margin-top: 4px; }
-    .info-box .trip-breakdown { font-size: 12px; color: #888; margin-top: 2px; }
-
-    .leaflet-container {
-      background: #b8d4e8;
-      font-family: inherit;
-    }
-
-    .leaflet-control-attribution {
-      font-size: 10px;
-      background: rgba(255,255,255,0.8) !important;
-    }
-
+    .info-box .trips { color: #636e72; font-size: 12px; margin-top: 3px; }
+    .leaflet-container { background: #b8d4e8; font-family: inherit; }
+    .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.8) !important; }
     @media (max-width: 768px) {
-      body { padding: 12px; }
-      h1 { font-size: 1.6rem; }
-      .legend { gap: 14px; }
-      .legend-item { font-size: 12px; }
-      #map { height: 480px; }
-      .stats { gap: 12px; font-size: 13px; }
-      .stat-number { font-size: 1.2rem; }
+      body { padding: 10px; }
+      h1 { font-size: 1.4rem; }
+      .legend { gap: 10px; }
+      .legend-item { font-size: 11px; }
+      #map { height: 400px; }
+      .stats { gap: 10px; font-size: 12px; padding: 10px; }
+      .stat-number { font-size: 1.1rem; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Preston's Travel Map</h1>
-    <p class="subtitle">United States & Canada - Work & Personal Travel</p>
-
+    <h1>${title}</h1>
+    <p class="subtitle">United States & Canada</p>
     <div class="legend">
       <div class="legend-item"><span class="legend-swatch swatch-work"></span> Work</div>
       <div class="legend-item"><span class="legend-swatch swatch-personal"></span> Personal</div>
       <div class="legend-item"><span class="legend-swatch swatch-both"></span> Both</div>
-      <div class="legend-item"><span class="legend-swatch swatch-unvisited"></span> Not Yet Visited</div>
+      <div class="legend-item"><span class="legend-swatch swatch-unvisited"></span> Not Visited</div>
     </div>
-
     <div class="map-container">
       <div id="map"></div>
       <div class="stats">
@@ -422,41 +239,27 @@ export default {
           <span class="stat-label">/ 50 states (${pct}%)</span>
         </div>
         <div class="stat-divider"></div>
-        <div class="stat-item">
-          <span class="stat-work">${workOnly.length} work only</span>
-        </div>
+        <span class="stat-work">${workOnly.length} work</span>
         <div class="stat-divider"></div>
-        <div class="stat-item">
-          <span class="stat-personal">${personalOnly.length} personal only</span>
-        </div>
+        <span class="stat-personal">${personalOnly.length} personal</span>
         <div class="stat-divider"></div>
-        <div class="stat-item">
-          <span class="stat-both">${bothStates.length} both</span>
-        </div>
-        ${workProvinces.length > 0 ? `
-        <div class="stat-divider"></div>
-        <div class="stat-item">
-          <span class="stat-prov">${workProvinces.length} province${workProvinces.length > 1 ? 's' : ''}</span>
-        </div>
-        ` : ''}
+        <span class="stat-both">${bothStates.length} both</span>
+        ${allProvinces.length > 0 ? `<div class="stat-divider"></div><span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>` : ''}
       </div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script>
-    // Data from server
     const workStates = ${JSON.stringify(workStates)};
     const personalStates = ${JSON.stringify(personalStates)};
     const workProvinces = ${JSON.stringify(workProvinces)};
+    const personalProvinces = ${JSON.stringify(personalProvinces)};
     const tripCounts = ${JSON.stringify(tripCounts)};
-    const provTripCounts = ${JSON.stringify(provTripCounts)};
-    const workTrips = ${JSON.stringify(workTrips)};
-    const personalTrips = ${JSON.stringify(personalTrips)};
     const stateNames = ${JSON.stringify(stateNames)};
     const provNames = ${JSON.stringify(provNames)};
+    const maxTrips = ${maxTrips};
 
-    // FIPS to state code mapping
     const fipsToState = {
       "01":"AL","02":"AK","04":"AZ","05":"AR","06":"CA","08":"CO","09":"CT","10":"DE",
       "11":"DC","12":"FL","13":"GA","15":"HI","16":"ID","17":"IL","18":"IN","19":"IA",
@@ -467,55 +270,41 @@ export default {
       "54":"WV","55":"WI","56":"WY"
     };
 
-    // Initialize map
-    const map = L.map('map', {
-      center: [44, -98],
-      zoom: 4,
-      minZoom: 3,
-      maxZoom: 10,
-      zoomControl: true
-    });
+    const map = L.map('map', { center: [44, -98], zoom: 4, minZoom: 3, maxZoom: 10 });
 
-    // CartoDB Positron tiles (clean, minimal)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      attribution: '&copy; OSM &copy; CARTO',
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(map);
 
-    // Labels layer on top
     const labelsPane = map.createPane('labels');
     labelsPane.style.zIndex = 650;
     labelsPane.style.pointerEvents = 'none';
-
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 20,
-      pane: 'labels'
+      subdomains: 'abcd', maxZoom: 20, pane: 'labels'
     }).addTo(map);
 
-    // Category functions
-    function getStateCategory(code) {
+    function getCategory(code, isProvince) {
+      if (isProvince) {
+        const inWork = workProvinces.includes(code);
+        const inPers = personalProvinces.includes(code);
+        if (inWork && inPers) return 'both';
+        if (inWork) return 'work';
+        if (inPers) return 'personal';
+        return 'unvisited';
+      }
       const inWork = workStates.includes(code);
-      const inPersonal = personalStates.includes(code);
-      if (inWork && inPersonal) return 'both';
+      const inPers = personalStates.includes(code);
+      if (inWork && inPers) return 'both';
       if (inWork) return 'work';
-      if (inPersonal) return 'personal';
+      if (inPers) return 'personal';
       return 'unvisited';
     }
 
-    function getProvCategory(code) {
-      return workProvinces.includes(code) ? 'work' : 'unvisited';
-    }
-
-    // Color with intensity based on trip count
     function getColor(category, count) {
-      // Max trips for scaling (NY has ~40)
-      const maxTrips = 40;
-      const minOpacity = 0.5;
-      const maxOpacity = 1.0;
-      const opacity = count > 0 ? minOpacity + (Math.min(count, maxTrips) / maxTrips) * (maxOpacity - minOpacity) : 1.0;
-
+      const minOp = 0.5, maxOp = 1.0;
+      const opacity = count > 0 ? minOp + (Math.min(count, maxTrips) / maxTrips) * (maxOp - minOp) : 1.0;
       switch(category) {
         case 'work': return { color: '#ff9800', opacity };
         case 'personal': return { color: '#e91e63', opacity };
@@ -524,60 +313,39 @@ export default {
       }
     }
 
-    function style(feature, isProvince = false) {
+    function style(feature, isProvince) {
       let code;
       if (isProvince) {
         code = feature.properties.iso_3166_2?.replace('CA-', '') ||
-               feature.properties.postal ||
-               feature.properties.name?.substring(0,2).toUpperCase();
+               feature.properties.postal || feature.properties.name?.substring(0,2).toUpperCase();
       } else {
         code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
       }
-
-      const category = isProvince ? getProvCategory(code) : getStateCategory(code);
-      const count = isProvince ? (provTripCounts[code] || 0) : (tripCounts[code] || 0);
+      const category = getCategory(code, isProvince);
+      const count = tripCounts[code] || 0;
       const { color, opacity } = getColor(category, count);
-
-      return {
-        fillColor: color,
-        weight: 1.5,
-        opacity: 1,
-        color: '#fff',
-        fillOpacity: opacity
-      };
+      return { fillColor: color, weight: 1.5, opacity: 1, color: '#fff', fillOpacity: opacity };
     }
 
     function highlightFeature(e) {
-      const layer = e.target;
-      layer.setStyle({
-        weight: 3,
-        color: '#333',
-        fillOpacity: 0.9
-      });
-      layer.bringToFront();
-      info.update(layer.feature.properties, layer.options.isProvince);
+      e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.9 });
+      e.target.bringToFront();
+      info.update(e.target.feature.properties, e.target.options.isProvince);
     }
 
-    function resetHighlight(e, geojsonLayer) {
-      geojsonLayer.resetStyle(e.target);
-      info.update();
-    }
+    function resetHighlight(e, layer) { layer.resetStyle(e.target); info.update(); }
 
-    // Info control
     const info = L.control({ position: 'topright' });
-
     info.onAdd = function() {
       this._div = L.DomUtil.create('div', 'info-box');
       this.update();
       return this._div;
     };
-
-    info.update = function(props, isProvince = false) {
+    info.update = function(props, isProvince) {
       if (!props) {
-        this._div.innerHTML = '<h4>Hover over a state</h4><div class="trips">to see trip details</div>';
+        this._div.innerHTML = '<h4>Hover over a state</h4><div class="trips">to see details</div>';
         return;
       }
-
       let code, name;
       if (isProvince) {
         code = props.iso_3166_2?.replace('CA-', '') || props.postal || props.name?.substring(0,2).toUpperCase();
@@ -586,12 +354,8 @@ export default {
         code = fipsToState[props.STATE] || props.STUSPS || props.postal || '';
         name = stateNames[code] || props.name || props.NAME || code;
       }
-
-      const category = isProvince ? getProvCategory(code) : getStateCategory(code);
-      const workCount = workTrips[code]?.length || 0;
-      const persCount = personalTrips[code]?.length || 0;
-      const totalCount = workCount + persCount;
-
+      const category = getCategory(code, isProvince);
+      const count = tripCounts[code] || 0;
       let statusText, statusColor;
       switch(category) {
         case 'work': statusText = 'Work'; statusColor = '#ff9800'; break;
@@ -599,65 +363,170 @@ export default {
         case 'both': statusText = 'Work + Personal'; statusColor = '#9c27b0'; break;
         default: statusText = 'Not visited'; statusColor = '#999';
       }
-
       let html = '<h4>' + name + '</h4>';
       html += '<div class="status" style="color:' + statusColor + '">' + statusText + '</div>';
-
-      if (totalCount > 0) {
-        html += '<div class="trips">' + totalCount + ' trip' + (totalCount > 1 ? 's' : '') + '</div>';
-        if (workCount > 0 && persCount > 0) {
-          html += '<div class="trip-breakdown">' + workCount + ' work, ' + persCount + ' personal</div>';
-        }
-      }
-
+      if (count > 0) html += '<div class="trips">' + count + ' trip' + (count > 1 ? 's' : '') + '</div>';
       this._div.innerHTML = html;
     };
-
     info.addTo(map);
 
-    // Load US States GeoJSON
     fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
       .then(r => r.json())
       .then(data => {
-        const statesLayer = L.geoJson(data, {
-          style: feature => style(feature, false),
-          onEachFeature: (feature, layer) => {
-            layer.options.isProvince = false;
-            layer.on({
-              mouseover: highlightFeature,
-              mouseout: e => resetHighlight(e, statesLayer),
-              click: e => map.fitBounds(e.target.getBounds())
-            });
+        const layer = L.geoJson(data, {
+          style: f => style(f, false),
+          onEachFeature: (f, l) => {
+            l.options.isProvince = false;
+            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
       });
 
-    // Load Canadian Provinces GeoJSON
     fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/canada.geojson')
       .then(r => r.json())
       .then(data => {
-        const provLayer = L.geoJson(data, {
-          style: feature => style(feature, true),
-          onEachFeature: (feature, layer) => {
-            layer.options.isProvince = true;
-            layer.on({
-              mouseover: highlightFeature,
-              mouseout: e => resetHighlight(e, provLayer),
-              click: e => map.fitBounds(e.target.getBounds())
-            });
+        const layer = L.geoJson(data, {
+          style: f => style(f, true),
+          onEachFeature: (f, l) => {
+            l.options.isProvince = true;
+            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
           }
         }).addTo(map);
       });
   </script>
 </body>
 </html>`;
+}
 
-    return new Response(html, {
-      headers: {
-        'Content-Type': 'text/html;charset=UTF-8',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600'
-      }
-    });
+function generateUsagePage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travel Map API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #fff;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 2.5rem; margin-bottom: 10px; }
+    .subtitle { color: rgba(255,255,255,0.7); font-size: 1.1rem; margin-bottom: 30px; }
+    .card { background: rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    h2 { font-size: 1.3rem; margin-bottom: 12px; color: #4fc3f7; }
+    p { line-height: 1.6; margin-bottom: 12px; color: rgba(255,255,255,0.85); }
+    code { background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.9em; }
+    pre { background: rgba(0,0,0,0.4); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-size: 0.85em; }
+    pre code { padding: 0; background: none; }
+    .param-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    .param-table th, .param-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .param-table th { color: #4fc3f7; font-weight: 600; }
+    .param-table td code { color: #81c784; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Travel Map API</h1>
+    <p class="subtitle">Generate interactive travel maps via URL parameters</p>
+
+    <div class="card">
+      <h2>Quick Example</h2>
+      <pre><code>https://travelmap.psiegel.org/?work=NY,CA,TX&personal=OH,HI&trips=NY:40,CA:9</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>URL Parameters</h2>
+      <table class="param-table">
+        <tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
+        <tr><td><code>work</code></td><td>States visited for work</td><td>NY,CA,TX,FL</td></tr>
+        <tr><td><code>personal</code></td><td>States visited personally</td><td>OH,HI,MI</td></tr>
+        <tr><td><code>prov</code></td><td>Canadian provinces (work)</td><td>ON,BC,NL</td></tr>
+        <tr><td><code>provPers</code></td><td>Canadian provinces (personal)</td><td>QC,AB</td></tr>
+        <tr><td><code>trips</code></td><td>Trip counts (for shading)</td><td>NY:40,CA:9,TX:17</td></tr>
+        <tr><td><code>title</code></td><td>Custom map title</td><td>My Travel Map</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Embed in MediaWiki</h2>
+      <p>Add this to your wiki page where you want the map. The script parses your trip tables automatically:</p>
+      <pre><code>&lt;html&gt;
+&lt;div id="travel-map-container"&gt;&lt;/div&gt;
+&lt;script&gt;
+(function() {
+  var stateCodes = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']);
+  var provCodes = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT']);
+
+  function extractLoc(text) {
+    if (!text) return null;
+    var prov = text.match(/,\\s*([A-Z]{2})\\s*,\\s*Canada/i);
+    if (prov && provCodes.has(prov[1].toUpperCase())) return { code: prov[1].toUpperCase(), isProv: true };
+    var st = text.match(/,\\s*([A-Z]{2})(?:\\s*$|[^a-zA-Z])/);
+    if (st && stateCodes.has(st[1])) return { code: st[1], isProv: false };
+    return null;
   }
-};
+
+  var work = {}, personal = {}, provs = {};
+
+  // Parse work tables (golive, immersion, adhoc)
+  document.querySelectorAll('.golive-table tr, .immersion-table tr').forEach(function(r) {
+    var c = r.querySelectorAll('td');
+    if (c.length >= 4) {
+      var res = extractLoc(c[c.length-1].textContent);
+      if (res) { if (res.isProv) provs[res.code] = (provs[res.code]||0)+1; else work[res.code] = (work[res.code]||0)+1; }
+    }
+  });
+  document.querySelectorAll('.adhoc-trip-table tr').forEach(function(r) {
+    var c = r.querySelectorAll('td');
+    if (c.length >= 4) {
+      var res = extractLoc(c[3].textContent);
+      if (res && !res.isProv) work[res.code] = (work[res.code]||0)+1;
+    }
+  });
+
+  // Parse personal trips
+  document.querySelectorAll('.personal-trips-table tr').forEach(function(r) {
+    var c = r.querySelectorAll('td');
+    if (c.length >= 1) {
+      var res = extractLoc(c[0].textContent);
+      if (res && !res.isProv) personal[res.code] = (personal[res.code]||0)+1;
+    }
+  });
+
+  // Build URL
+  var p = [], trips = {};
+  if (Object.keys(work).length) p.push('work=' + Object.keys(work).join(','));
+  if (Object.keys(personal).length) p.push('personal=' + Object.keys(personal).join(','));
+  if (Object.keys(provs).length) p.push('prov=' + Object.keys(provs).join(','));
+  for (var s in work) trips[s] = (trips[s]||0) + work[s];
+  for (var s in personal) trips[s] = (trips[s]||0) + personal[s];
+  for (var s in provs) trips[s] = (trips[s]||0) + provs[s];
+  var tp = []; for (var k in trips) tp.push(k+':'+trips[k]);
+  if (tp.length) p.push('trips=' + tp.join(','));
+  p.push('title=' + encodeURIComponent("Preston's Travel Map"));
+
+  var iframe = document.createElement('iframe');
+  iframe.src = 'https://travelmap.psiegel.org/?' + p.join('&amp;');
+  iframe.style.cssText = 'width:100%;height:650px;border:none;border-radius:12px;';
+  document.getElementById('travel-map-container').appendChild(iframe);
+})();
+&lt;/script&gt;
+&lt;/html&gt;</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Features</h2>
+      <p>• Accurate US state and Canadian province borders using Leaflet + GeoJSON</p>
+      <p>• Color coding: Work (orange), Personal (pink), Both (purple)</p>
+      <p>• Intensity shading based on trip count</p>
+      <p>• Interactive hover tooltips and zoom</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
