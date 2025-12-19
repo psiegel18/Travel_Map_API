@@ -244,6 +244,22 @@ function generateMapHtml(data) {
     .info-box .trip-personal { color: #e91e63; }
     .leaflet-container { background: #b8d4e8; font-family: inherit; }
     .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.8) !important; }
+    .region-label {
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 5px;
+      border-radius: 3px;
+      white-space: nowrap;
+      pointer-events: none;
+      text-shadow: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .region-label-large {
+      font-size: 13px;
+      padding: 3px 7px;
+    }
     @media (max-width: 768px) {
       body { padding: 8px; }
       h1 { font-size: 1.3rem; }
@@ -345,12 +361,45 @@ function generateMapHtml(data) {
     const provincesPane = map.createPane('provinces');
     provincesPane.style.zIndex = 450;
 
+    const regionLabelsPane = map.createPane('regionLabels');
+    regionLabelsPane.style.zIndex = 500;
+    regionLabelsPane.style.pointerEvents = 'none';
+
     const labelsPane = map.createPane('labels');
     labelsPane.style.zIndex = 650;
     labelsPane.style.pointerEvents = 'none';
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 20, pane: 'labels'
     }).addTo(map);
+
+    // Function to add a trip count label at the center of a region
+    function addRegionLabel(layer, code, locationType) {
+      const count = totalTripCounts[code] || 0;
+      if (count === 0) return; // Only add labels for visited regions with trip counts
+
+      const category = getCategory(code, locationType);
+      if (category === 'unvisited') return;
+
+      // Get the center of the feature bounds
+      const bounds = layer.getBounds();
+      const center = bounds.getCenter();
+
+      // Determine if this is a larger region (country) for styling
+      const isLarge = locationType === 'country';
+
+      const icon = L.divIcon({
+        className: 'region-label' + (isLarge ? ' region-label-large' : ''),
+        html: count.toString(),
+        iconSize: null,
+        iconAnchor: [0, 0]
+      });
+
+      L.marker(center, {
+        icon: icon,
+        pane: 'regionLabels',
+        interactive: false
+      }).addTo(map);
+    }
 
     function getProvinceCode(props) {
       if (props.name && provNameToCode[props.name]) {
@@ -574,6 +623,7 @@ function generateMapHtml(data) {
             const category = getCategory(code, 'country');
             if (category !== 'unvisited') {
               l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+              addRegionLabel(l, code, 'country');
             }
           }
         }).addTo(map);
@@ -591,6 +641,7 @@ function generateMapHtml(data) {
             l.locationType = 'state';
             l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+            addRegionLabel(l, code, 'state');
           }
         }).addTo(map);
       });
@@ -606,6 +657,7 @@ function generateMapHtml(data) {
             l.locationType = 'province';
             l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+            addRegionLabel(l, code, 'province');
           }
         }).addTo(map);
       });
