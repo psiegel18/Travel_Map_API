@@ -255,11 +255,14 @@ function generateMapHtml(data) {
       pointer-events: none;
       text-shadow: none;
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform 0.15s ease-out, opacity 0.15s ease-out;
     }
-    .region-label-large {
-      font-size: 13px;
-      padding: 3px 7px;
-    }
+    .region-label-zoom-2 { transform: scale(0.5); opacity: 0.6; }
+    .region-label-zoom-3 { transform: scale(0.6); opacity: 0.7; }
+    .region-label-zoom-4 { transform: scale(0.75); opacity: 0.85; }
+    .region-label-zoom-5 { transform: scale(0.85); opacity: 0.9; }
+    .region-label-zoom-6 { transform: scale(1); opacity: 1; }
+    .region-label-hidden { display: none; }
     @media (max-width: 768px) {
       body { padding: 8px; }
       h1 { font-size: 1.3rem; }
@@ -372,6 +375,43 @@ function generateMapHtml(data) {
       subdomains: 'abcd', maxZoom: 20, pane: 'labels'
     }).addTo(map);
 
+    // Array to store all region label markers for zoom-based updates
+    const regionLabels = [];
+
+    // Function to get zoom class based on current zoom level
+    function getZoomClass(zoom, locationType) {
+      // Countries are visible at lower zoom levels
+      const isCountry = locationType === 'country';
+      const minZoom = isCountry ? 2 : 3;
+
+      if (zoom < minZoom) return 'region-label-hidden';
+      if (zoom <= 2) return 'region-label-zoom-2';
+      if (zoom <= 3) return 'region-label-zoom-3';
+      if (zoom <= 4) return 'region-label-zoom-4';
+      if (zoom <= 5) return 'region-label-zoom-5';
+      return 'region-label-zoom-6';
+    }
+
+    // Update all labels when zoom changes
+    function updateLabelsForZoom() {
+      const zoom = map.getZoom();
+      regionLabels.forEach(item => {
+        const el = item.marker.getElement();
+        if (!el) return;
+
+        // Remove old zoom classes
+        el.classList.remove('region-label-zoom-2', 'region-label-zoom-3', 'region-label-zoom-4',
+                           'region-label-zoom-5', 'region-label-zoom-6', 'region-label-hidden');
+
+        // Add new zoom class
+        const zoomClass = getZoomClass(zoom, item.locationType);
+        el.classList.add(zoomClass);
+      });
+    }
+
+    // Listen for zoom changes
+    map.on('zoomend', updateLabelsForZoom);
+
     // Function to add a trip count label at the center of a region
     function addRegionLabel(layer, code, locationType) {
       const count = totalTripCounts[code] || 0;
@@ -384,21 +424,24 @@ function generateMapHtml(data) {
       const bounds = layer.getBounds();
       const center = bounds.getCenter();
 
-      // Determine if this is a larger region (country) for styling
-      const isLarge = locationType === 'country';
+      // Get initial zoom class
+      const zoomClass = getZoomClass(map.getZoom(), locationType);
 
       const icon = L.divIcon({
-        className: 'region-label' + (isLarge ? ' region-label-large' : ''),
+        className: 'region-label ' + zoomClass,
         html: count.toString(),
         iconSize: null,
         iconAnchor: [0, 0]
       });
 
-      L.marker(center, {
+      const marker = L.marker(center, {
         icon: icon,
         pane: 'regionLabels',
         interactive: false
       }).addTo(map);
+
+      // Store reference for zoom updates
+      regionLabels.push({ marker, locationType });
     }
 
     function getProvinceCode(props) {
