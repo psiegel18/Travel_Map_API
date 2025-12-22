@@ -96,6 +96,7 @@ function generateHTML(data) {
       height: 480px;
       border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      border: 2px solid rgba(255,255,255,0.1);
     }
     .legend {
       display: flex;
@@ -120,11 +121,12 @@ function generateHTML(data) {
     .legend-color.hatched {
       background: repeating-linear-gradient(
         45deg,
-        transparent,
+        #ff9800,
+        #ff9800 3px,
         transparent 3px,
-        rgba(255,255,255,0.4) 3px,
-        rgba(255,255,255,0.4) 6px
+        transparent 6px
       );
+      opacity: 0.7;
     }
     .work-color { background-color: #ff9800; }
     .personal-color { background-color: #e91e63; }
@@ -146,6 +148,12 @@ function generateHTML(data) {
       border-radius: 50%;
       box-shadow: 0 0 3px rgba(0,0,0,0.5);
     }
+    .future-only-state {
+      fill-opacity: 0.3;
+    }
+    .leaflet-interactive.future-only-state {
+      stroke-dasharray: none !important;
+    }
     .info-box {
       background: rgba(255,255,255,0.1);
       backdrop-filter: blur(10px);
@@ -166,6 +174,22 @@ function generateHTML(data) {
     .popup-work { color: #e65100; }
     .popup-personal { color: #c2185b; }
     .popup-future { font-style: italic; opacity: 0.8; }
+    .trip-tooltip {
+      background: rgba(255,255,255,0.95);
+      border: none;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+    .trip-tooltip strong {
+      font-size: 14px;
+      color: #333;
+    }
+    .trip-tooltip em {
+      color: #666;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -186,11 +210,11 @@ function generateHTML(data) {
         <span>Both</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color work-color" style="border: 3px dashed #fff;"></div>
-        <span>Has Upcoming</span>
+        <div class="legend-color work-color" style="border: 3px dashed #333;"></div>
+        <span>+ Upcoming</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color work-future hatched"></div>
+        <div class="legend-color" style="background-color: #ff9800; opacity: 0.35;"></div>
         <span>Future Only</span>
       </div>
     </div>
@@ -218,7 +242,7 @@ function generateHTML(data) {
       scrollWheelZoom: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
       subdomains: 'abcd',
       maxZoom: 19
@@ -260,10 +284,16 @@ function generateHTML(data) {
       const hasFuturePersonal = persFutureCount > 0;
       const hasFuture = hasFutureWork || hasFuturePersonal;
       
-      // Only future (no past trips) - show faded with dashed border
+      // Only future (no past trips) - show with stripes pattern
       if (!hasPast && hasFuture) {
         const futureColor = hasFutureWork ? '#ff9800' : '#e91e63';
-        return { color: futureColor, weight: 3, fillColor: futureColor, fillOpacity: 0.3, dashArray: '8,4' };
+        return { 
+          color: futureColor, 
+          weight: 2, 
+          fillColor: futureColor, 
+          fillOpacity: 0.25,
+          className: 'future-only-state'
+        };
       }
       
       // Has past trips - determine base style
@@ -277,14 +307,14 @@ function generateHTML(data) {
         baseStyle.fillColor = '#e91e63';
       } else {
         // No trips at all
-        return { color: '#444', weight: 1, fillColor: '#2a2a3e', fillOpacity: 0.5 };
+        return { color: '#888', weight: 1, fillColor: '#e0e0e0', fillOpacity: 0.3 };
       }
       
       // If has future trips too, add dashed border indicator
       if (hasFuture) {
         baseStyle.weight = 4;
         baseStyle.dashArray = '8,4';
-        baseStyle.color = '#fff';
+        baseStyle.color = '#333';
       }
       
       return baseStyle;
@@ -308,7 +338,13 @@ function generateHTML(data) {
       
       // Only future (no past trips)
       if (!hasPast && hasFuture) {
-        return { color: '#e91e63', weight: 3, fillColor: '#e91e63', fillOpacity: 0.3, dashArray: '8,4' };
+        return { 
+          color: '#e91e63', 
+          weight: 2, 
+          fillColor: '#e91e63', 
+          fillOpacity: 0.25,
+          className: 'future-only-state'
+        };
       }
       
       // Has past trips
@@ -328,9 +364,32 @@ function generateHTML(data) {
       if (hasFuture) {
         baseStyle.weight = 4;
         baseStyle.dashArray = '8,4';
+        baseStyle.color = '#333';
       }
       
       return baseStyle;
+    }
+
+    function buildTooltip(code, name) {
+      const workTotal = workTrips[code] || 0;
+      const workFutureCount = workTripsFuture[code] || 0;
+      const workPastCount = workTotal - workFutureCount;
+      
+      const persTotal = persTrips[code] || 0;
+      const persFutureCount = persTripsFuture[code] || 0;
+      const persPastCount = persTotal - persFutureCount;
+      
+      const totalPast = workPastCount + persPastCount;
+      const totalFuture = workFutureCount + persFutureCount;
+      
+      let text = '<strong>' + name + '</strong>';
+      if (totalPast > 0) {
+        text += '<br>' + totalPast + ' trip' + (totalPast > 1 ? 's' : '');
+      }
+      if (totalFuture > 0) {
+        text += '<br><em>+' + totalFuture + ' upcoming</em>';
+      }
+      return text;
     }
 
     function buildPopup(code, name) {
@@ -372,8 +431,13 @@ function generateHTML(data) {
           },
           onEachFeature: function(feature, layer) {
             const stateCode = stateNameToCode[feature.properties.name];
-            if (workStates.includes(stateCode) || personalStates.includes(stateCode) ||
-                workFuture.includes(stateCode) || personalFuture.includes(stateCode)) {
+            const hasTrips = (workTrips[stateCode] || 0) > 0 || (persTrips[stateCode] || 0) > 0;
+            if (hasTrips) {
+              layer.bindTooltip(buildTooltip(stateCode, feature.properties.name), {
+                permanent: false,
+                direction: 'auto',
+                className: 'trip-tooltip'
+              });
               layer.bindPopup(buildPopup(stateCode, feature.properties.name));
             }
           }
@@ -391,7 +455,13 @@ function generateHTML(data) {
           },
           onEachFeature: function(feature, layer) {
             const provCode = provNameToCode[feature.properties.name];
-            if (provinces.includes(provCode) || provFuture.includes(provCode)) {
+            const hasTrips = (workTrips[provCode] || 0) > 0 || (persTrips[provCode] || 0) > 0;
+            if (hasTrips) {
+              layer.bindTooltip(buildTooltip(provCode, feature.properties.name), {
+                permanent: false,
+                direction: 'auto',
+                className: 'trip-tooltip'
+              });
               layer.bindPopup(buildPopup(provCode, feature.properties.name));
             }
           }
@@ -416,6 +486,11 @@ function generateHTML(data) {
             },
             onEachFeature: function(feature, layer) {
               const code = feature.properties.ISO_A3;
+              layer.bindTooltip(buildTooltip(code, feature.properties.ADMIN), {
+                permanent: false,
+                direction: 'auto',
+                className: 'trip-tooltip'
+              });
               layer.bindPopup(buildPopup(code, feature.properties.ADMIN));
             }
           }).addTo(map);
