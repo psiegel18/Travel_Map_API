@@ -128,9 +128,24 @@ function generateHTML(data) {
     }
     .work-color { background-color: #ff9800; }
     .personal-color { background-color: #e91e63; }
-    .both-color { background: linear-gradient(135deg, #ff9800 50%, #e91e63 50%); }
+    .both-color { background-color: #9c27b0; }
     .work-future { background-color: #ff9800; }
     .personal-future { background-color: #e91e63; }
+    .has-upcoming {
+      position: relative;
+      overflow: hidden;
+    }
+    .has-upcoming::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 3px rgba(0,0,0,0.5);
+    }
     .info-box {
       background: rgba(255,255,255,0.1);
       backdrop-filter: blur(10px);
@@ -171,12 +186,12 @@ function generateHTML(data) {
         <span>Both</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color work-future hatched"></div>
-        <span>Future (Work)</span>
+        <div class="legend-color work-color" style="border: 3px dashed #fff;"></div>
+        <span>Has Upcoming</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color personal-future hatched"></div>
-        <span>Future (Personal)</span>
+        <div class="legend-color work-future hatched"></div>
+        <span>Future Only</span>
       </div>
     </div>
   </div>
@@ -228,64 +243,115 @@ function generateHTML(data) {
     document.body.appendChild(svgDefs);
 
     function getStateStyle(stateCode) {
-      const isWork = workStates.includes(stateCode) || provinces.includes(stateCode);
-      const isPersonal = personalStates.includes(stateCode);
-      const isWorkFuture = workFuture.includes(stateCode) || provFuture.includes(stateCode);
-      const isPersonalFuture = personalFuture.includes(stateCode);
+      // Calculate actual past trips (total minus future)
+      const workTotal = workTrips[stateCode] || 0;
+      const workFutureCount = workTripsFuture[stateCode] || 0;
+      const workPastCount = workTotal - workFutureCount;
       
-      // Only future (no past trips)
-      const onlyWorkFuture = isWorkFuture && !isWork;
-      const onlyPersonalFuture = isPersonalFuture && !isPersonal;
+      const persTotal = persTrips[stateCode] || 0;
+      const persFutureCount = persTripsFuture[stateCode] || 0;
+      const persPastCount = persTotal - persFutureCount;
       
-      if (isWork && isPersonal) {
-        return { color: '#fff', weight: 2, fillColor: '#9c27b0', fillOpacity: 0.7 };
-      } else if (isWork) {
-        return { color: '#fff', weight: 2, fillColor: '#ff9800', fillOpacity: 0.7 };
-      } else if (isPersonal) {
-        return { color: '#fff', weight: 2, fillColor: '#e91e63', fillOpacity: 0.7 };
-      } else if (onlyWorkFuture) {
-        return { color: '#ff9800', weight: 2, fillColor: '#ff9800', fillOpacity: 0.3, dashArray: '5,5' };
-      } else if (onlyPersonalFuture) {
-        return { color: '#e91e63', weight: 2, fillColor: '#e91e63', fillOpacity: 0.3, dashArray: '5,5' };
+      const hasPastWork = workPastCount > 0;
+      const hasPastPersonal = persPastCount > 0;
+      const hasPast = hasPastWork || hasPastPersonal;
+      
+      const hasFutureWork = workFutureCount > 0;
+      const hasFuturePersonal = persFutureCount > 0;
+      const hasFuture = hasFutureWork || hasFuturePersonal;
+      
+      // Only future (no past trips) - show faded with dashed border
+      if (!hasPast && hasFuture) {
+        const futureColor = hasFutureWork ? '#ff9800' : '#e91e63';
+        return { color: futureColor, weight: 3, fillColor: futureColor, fillOpacity: 0.3, dashArray: '8,4' };
       }
-      return { color: '#444', weight: 1, fillColor: '#2a2a3e', fillOpacity: 0.5 };
+      
+      // Has past trips - determine base style
+      let baseStyle = { color: '#fff', weight: 2, fillOpacity: 0.7 };
+      
+      if (hasPastWork && hasPastPersonal) {
+        baseStyle.fillColor = '#9c27b0';
+      } else if (hasPastWork) {
+        baseStyle.fillColor = '#ff9800';
+      } else if (hasPastPersonal) {
+        baseStyle.fillColor = '#e91e63';
+      } else {
+        // No trips at all
+        return { color: '#444', weight: 1, fillColor: '#2a2a3e', fillOpacity: 0.5 };
+      }
+      
+      // If has future trips too, add dashed border indicator
+      if (hasFuture) {
+        baseStyle.weight = 4;
+        baseStyle.dashArray = '8,4';
+        baseStyle.color = '#fff';
+      }
+      
+      return baseStyle;
     }
 
     function getCountryStyle(countryCode) {
-      const isWork = workCountries.includes(countryCode);
-      const isPersonal = persCountries.includes(countryCode);
-      const isPersonalFuture = persCountriesFuture.includes(countryCode);
+      // Calculate actual past trips (total minus future)
+      const workTotal = workTrips[countryCode] || 0;
+      const workFutureCount = workTripsFuture[countryCode] || 0;
+      const workPastCount = workTotal - workFutureCount;
       
-      const onlyFuture = isPersonalFuture && !isPersonal && !isWork;
+      const persTotal = persTrips[countryCode] || 0;
+      const persFutureCount = persTripsFuture[countryCode] || 0;
+      const persPastCount = persTotal - persFutureCount;
       
-      if (isWork && isPersonal) {
-        return { color: '#fff', weight: 2, fillColor: '#9c27b0', fillOpacity: 0.7 };
-      } else if (isWork) {
-        return { color: '#fff', weight: 2, fillColor: '#ff9800', fillOpacity: 0.7 };
-      } else if (isPersonal) {
-        return { color: '#fff', weight: 2, fillColor: '#e91e63', fillOpacity: 0.7 };
-      } else if (onlyFuture) {
-        return { color: '#e91e63', weight: 2, fillColor: '#e91e63', fillOpacity: 0.3, dashArray: '5,5' };
+      const hasPastWork = workPastCount > 0;
+      const hasPastPersonal = persPastCount > 0;
+      const hasPast = hasPastWork || hasPastPersonal;
+      
+      const hasFuture = persFutureCount > 0;
+      
+      // Only future (no past trips)
+      if (!hasPast && hasFuture) {
+        return { color: '#e91e63', weight: 3, fillColor: '#e91e63', fillOpacity: 0.3, dashArray: '8,4' };
       }
-      return null;
+      
+      // Has past trips
+      let baseStyle = { color: '#fff', weight: 2, fillOpacity: 0.7 };
+      
+      if (hasPastWork && hasPastPersonal) {
+        baseStyle.fillColor = '#9c27b0';
+      } else if (hasPastWork) {
+        baseStyle.fillColor = '#ff9800';
+      } else if (hasPastPersonal) {
+        baseStyle.fillColor = '#e91e63';
+      } else {
+        return null;
+      }
+      
+      // If has future trips too, add dashed border
+      if (hasFuture) {
+        baseStyle.weight = 4;
+        baseStyle.dashArray = '8,4';
+      }
+      
+      return baseStyle;
     }
 
     function buildPopup(code, name) {
       let html = '<div class="popup-content"><strong>' + name + '</strong>';
       
-      const workCount = workTrips[code] || 0;
-      const persCount = persTrips[code] || 0;
+      const workTotal = workTrips[code] || 0;
       const workFutureCount = workTripsFuture[code] || 0;
-      const persFutureCount = persTripsFuture[code] || 0;
+      const workPastCount = workTotal - workFutureCount;
       
-      if (workCount > 0) {
-        html += '<br><span class="popup-work">Work: ' + workCount + ' trip' + (workCount > 1 ? 's' : '') + '</span>';
+      const persTotal = persTrips[code] || 0;
+      const persFutureCount = persTripsFuture[code] || 0;
+      const persPastCount = persTotal - persFutureCount;
+      
+      if (workPastCount > 0) {
+        html += '<br><span class="popup-work">Work: ' + workPastCount + ' trip' + (workPastCount > 1 ? 's' : '') + '</span>';
       }
       if (workFutureCount > 0) {
         html += '<br><span class="popup-work popup-future">Work (upcoming): ' + workFutureCount + ' trip' + (workFutureCount > 1 ? 's' : '') + '</span>';
       }
-      if (persCount > 0) {
-        html += '<br><span class="popup-personal">Personal: ' + persCount + ' trip' + (persCount > 1 ? 's' : '') + '</span>';
+      if (persPastCount > 0) {
+        html += '<br><span class="popup-personal">Personal: ' + persPastCount + ' trip' + (persPastCount > 1 ? 's' : '') + '</span>';
       }
       if (persFutureCount > 0) {
         html += '<br><span class="popup-personal popup-future">Personal (upcoming): ' + persFutureCount + ' trip' + (persFutureCount > 1 ? 's' : '') + '</span>';
