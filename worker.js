@@ -35,8 +35,28 @@ export default Sentry.withSentry(
       try {
         const url = new URL(request.url);
 
-        // Test route for Sentry - throws an error to verify integration
+        // Test route for Sentry - admin access only
         if (url.pathname === '/debug-sentry') {
+          const providedKey = url.searchParams.get('key');
+          const adminPassword = env.ADMIN_PASSWORD;
+
+          // Require admin password to be configured
+          if (!adminPassword) {
+            return new Response('Sentry debug endpoint is not configured', {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain' }
+            });
+          }
+
+          // Validate the provided key
+          if (!providedKey || providedKey !== adminPassword) {
+            return new Response('Unauthorized - invalid or missing admin key', {
+              status: 401,
+              headers: { 'Content-Type': 'text/plain' }
+            });
+          }
+
+          // Admin authenticated - throw test error for Sentry
           throw new Error('Sentry test error - integration is working!');
         }
 
