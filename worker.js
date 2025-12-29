@@ -35,6 +35,11 @@ export default Sentry.withSentry(
       try {
         const url = new URL(request.url);
 
+        // Test route for Sentry - throws an error to verify integration
+        if (url.pathname === '/debug-sentry') {
+          throw new Error('Sentry test error - integration is working!');
+        }
+
         const hasData = url.searchParams.has('work') ||
                         url.searchParams.has('personal') ||
                         url.searchParams.has('prov') ||
