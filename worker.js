@@ -3,21 +3,50 @@
  * Added future trip support with visual indicators
  */
 
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
+import * as Sentry from '@sentry/cloudflare';
 
-    const hasData = url.searchParams.has('work') ||
-                    url.searchParams.has('personal') ||
-                    url.searchParams.has('prov') ||
-                    url.searchParams.has('persCountries') ||
-                    url.searchParams.has('workCountries');
+export default Sentry.withSentry(
+  (env) => {
+    const versionId = env.CF_VERSION_METADATA?.id || 'unknown';
 
-    if (!hasData) {
-      return new Response(generateUsagePage(), {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
-      });
-    }
+    return {
+      dsn: env.SENTRY_DSN,
+      release: versionId,
+      environment: env.ENVIRONMENT || 'production',
+
+      // Sample 10% of transactions for performance monitoring
+      tracesSampleRate: 0.1,
+
+      // Capture request headers for debugging (excludes cookies/auth)
+      sendDefaultPii: false,
+
+      beforeSend(event) {
+        // Scrub any accidentally captured sensitive data
+        if (event.request?.headers) {
+          delete event.request.headers['cookie'];
+          delete event.request.headers['authorization'];
+        }
+        return event;
+      },
+    };
+  },
+  {
+    async fetch(request, env, ctx) {
+      try {
+        const url = new URL(request.url);
+
+        const hasData = url.searchParams.has('work') ||
+                        url.searchParams.has('personal') ||
+                        url.searchParams.has('prov') ||
+                        url.searchParams.has('persCountries') ||
+                        url.searchParams.has('workCountries');
+
+        if (!hasData) {
+          Sentry.setTag('map.has_data', 'false');
+          return new Response(generateUsagePage(), {
+            headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+          });
+        }
 
     const workParam = url.searchParams.get('work') || '';
     const personalParam = url.searchParams.get('personal') || '';
@@ -111,6 +140,28 @@ export default {
     const allCountries = [...new Set([...workCountries, ...personalCountries])];
     const pct = allStates.length > 0 ? Math.round(allStates.length / 50 * 100) : 0;
 
+    // Set Sentry tags for efficient issue filtering
+    Sentry.setTag('map.has_data', hasData.toString());
+    Sentry.setTag('map.states_count', allStates.length.toString());
+    Sentry.setTag('map.provinces_count', allProvinces.length.toString());
+    Sentry.setTag('map.countries_count', allCountries.length.toString());
+    Sentry.setTag('map.has_work', (workStates.length > 0 || workCountries.length > 0).toString());
+    Sentry.setTag('map.has_personal', (personalStates.length > 0 || personalCountries.length > 0).toString());
+    Sentry.setTag('map.has_future', (workFutureStates.length > 0 || personalFutureStates.length > 0).toString());
+    Sentry.setTag('map.has_trip_counts', (Object.keys(workTripCounts).length > 0 || Object.keys(persTripCounts).length > 0).toString());
+
+    // Set context with detailed info (not indexed but searchable)
+    Sentry.setContext('map_params', {
+      workStates: workStates.join(',') || 'none',
+      personalStates: personalStates.join(',') || 'none',
+      workProvinces: workProvinces.join(',') || 'none',
+      personalProvinces: personalProvinces.join(',') || 'none',
+      workCountries: workCountries.join(',') || 'none',
+      personalCountries: personalCountries.join(',') || 'none',
+      futureStates: [...workFutureStates, ...personalFutureStates].join(',') || 'none',
+      title: title,
+    });
+
     const mapHtml = generateMapHtml({
       workStates, personalStates, workProvinces, personalProvinces,
       workCountries, personalCountries,
@@ -120,15 +171,35 @@ export default {
       bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title
     });
 
-    return new Response(mapHtml, {
-      headers: {
-        'Content-Type': 'text/html;charset=UTF-8',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600'
+        return new Response(mapHtml, {
+          headers: {
+            'Content-Type': 'text/html;charset=UTF-8',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=3600'
+          }
+        });
+      } catch (error) {
+        // Capture the error in Sentry with full context
+        Sentry.captureException(error);
+
+        // Return a user-friendly error response
+        return new Response(
+          `<!DOCTYPE html><html><head><title>Error</title></head><body>
+          <h1>Something went wrong</h1>
+          <p>We encountered an error generating your travel map. Please try again.</p>
+          </body></html>`,
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'text/html;charset=UTF-8',
+              'Access-Control-Allow-Origin': '*'
+            }
+          }
+        );
       }
-    });
+    }
   }
-};
+);
 
 function generateMapHtml(data) {
   const {
