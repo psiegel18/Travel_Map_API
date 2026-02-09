@@ -90,62 +90,90 @@ export default Sentry.withSentry(
     const workTripsFutureParam = url.searchParams.get('workTripsFuture') || '';
     const persTripsFutureParam = url.searchParams.get('persTripsFuture') || '';
     
-    const title = url.searchParams.get('title') || 'Travel Map';
-
-    const workStates = workParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const personalStates = personalParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const workProvinces = provParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const personalProvinces = provPersParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const workCountries = workCountriesParam.toUpperCase().split(',').filter(s => s.trim().length === 3);
-    const personalCountries = persCountriesParam.toUpperCase().split(',').filter(s => s.trim().length === 3);
-    
-    // Future locations
-    const workFutureStates = workFutureParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const personalFutureStates = personalFutureParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const workFutureProvinces = provFutureParam.toUpperCase().split(',').filter(s => s.trim().length === 2);
-    const persCountriesFuture = persCountriesFutureParam.toUpperCase().split(',').filter(s => s.trim().length === 3);
-
-    // Parse work trip counts (total including future)
-    const workTripCounts = {};
-    if (workTripsParam) {
-      workTripsParam.split(',').forEach(pair => {
-        const [code, count] = pair.split(':');
-        if (code && count) {
-          workTripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
-        }
-      });
+    // Sanitize title to prevent XSS/HTML injection
+    function sanitizeTitle(title) {
+      if (!title) return 'Travel Map';
+      // Remove HTML tags
+      title = title.replace(/<[^>]*>/g, '');
+      // Remove potentially dangerous characters
+      title = title.replace(/[<>"'`]/g, '');
+      // Limit length
+      return title.slice(0, 100).trim() || 'Travel Map';
     }
 
-    // Parse personal trip counts (total including future)
-    const persTripCounts = {};
-    if (persTripsParam) {
-      persTripsParam.split(',').forEach(pair => {
-        const [code, count] = pair.split(':');
-        if (code && count) {
-          persTripCounts[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
-        }
-      });
+    const title = sanitizeTitle(url.searchParams.get('title'));
+
+    // Valid code sets for input validation
+    const VALID_STATES = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC']);
+    const VALID_PROVINCES = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT']);
+    const VALID_COUNTRIES = new Set(['AFG','ALB','DZA','ARG','AUS','AUT','BHS','BEL','BLZ','BRA','BGR','KHM','CHL','CHN','COL','CRI','HRV','CUB','CZE','DNK','DOM','ECU','EGY','EST','FIN','FRA','DEU','GRC','GTM','HND','HUN','ISL','IND','IDN','IRL','ISR','ITA','JAM','JPN','KEN','LVA','LTU','LUX','MYS','MEX','MAR','NLD','NZL','NIC','NOR','PAN','PER','PHL','POL','PRT','PRI','ROU','RUS','SGP','SVK','SVN','ZAF','KOR','ESP','SWE','CHE','TWN','THA','TUR','GBR','UKR','URY','VAT','VEN','VNM','ENG','SCT','WLS','NIR']);
+
+    // Validation helper for location codes
+    function validateCodes(codes, validSet, length) {
+      return codes.filter(code => {
+        const trimmed = code.trim().toUpperCase();
+        return trimmed.length === length && validSet.has(trimmed);
+      }).map(code => code.trim().toUpperCase());
     }
-    
-    // Parse future trip counts
-    const workTripsFuture = {};
-    if (workTripsFutureParam) {
-      workTripsFutureParam.split(',').forEach(pair => {
+
+    // Validation helper for trip counts
+    function parseTripCounts(param, validSet) {
+      const counts = {};
+      if (!param) return counts;
+      param.split(',').forEach(pair => {
         const [code, count] = pair.split(':');
         if (code && count) {
-          workTripsFuture[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
+          const trimmedCode = code.toUpperCase().trim();
+          const num = parseInt(count, 10);
+          // Validate: must be valid code, valid number, positive, and reasonable (<100000)
+          if (validSet.has(trimmedCode) && !isNaN(num) && num > 0 && num < 100000) {
+            counts[trimmedCode] = num;
+          }
         }
       });
+      return counts;
     }
+
+    const workStates = validateCodes(workParam.split(','), VALID_STATES, 2);
+    const personalStates = validateCodes(personalParam.split(','), VALID_STATES, 2);
+    const workProvinces = validateCodes(provParam.split(','), VALID_PROVINCES, 2);
+    const personalProvinces = validateCodes(provPersParam.split(','), VALID_PROVINCES, 2);
+    const workCountries = validateCodes(workCountriesParam.split(','), VALID_COUNTRIES, 3);
+    const personalCountries = validateCodes(persCountriesParam.split(','), VALID_COUNTRIES, 3);
     
-    const persTripsFuture = {};
-    if (persTripsFutureParam) {
-      persTripsFutureParam.split(',').forEach(pair => {
-        const [code, count] = pair.split(':');
-        if (code && count) {
-          persTripsFuture[code.toUpperCase().trim()] = parseInt(count, 10) || 0;
+    // Future locations (validate these too)
+    const workFutureStates = validateCodes(workFutureParam.split(','), VALID_STATES, 2);
+    const personalFutureStates = validateCodes(personalFutureParam.split(','), VALID_STATES, 2);
+    const workFutureProvinces = validateCodes(provFutureParam.split(','), VALID_PROVINCES, 2);
+    const persCountriesFuture = validateCodes(persCountriesFutureParam.split(','), VALID_COUNTRIES, 3);
+
+    // Combine valid sets for trip count validation (states + provinces for work/personal)
+    const VALID_STATE_PROV = new Set([...VALID_STATES, ...VALID_PROVINCES]);
+
+    // Parse and validate trip counts
+    const workTripCounts = parseTripCounts(workTripsParam, VALID_STATE_PROV);
+    const persTripCounts = parseTripCounts(persTripsParam, VALID_STATE_PROV);
+    const workTripsFuture = parseTripCounts(workTripsFutureParam, VALID_STATE_PROV);
+    const persTripsFuture = parseTripCounts(persTripsFutureParam, VALID_STATE_PROV);
+
+    // Helper function to split locations into past and future-only categories
+    function splitPastFuture(allLocations, futureLocations, tripCounts, futureTripCounts) {
+      const past = [];
+      const futureOnly = [];
+
+      allLocations.forEach(code => {
+        const total = tripCounts[code] || 0;
+        const future = futureTripCounts[code] || 0;
+        const pastCount = total - future;
+
+        if (pastCount > 0) {
+          past.push(code);
+        } else if (future > 0 || futureLocations.includes(code)) {
+          futureOnly.push(code);
         }
       });
+
+      return { past, futureOnly };
     }
 
     // Calculate total trip counts (for shading intensity)
@@ -164,6 +192,45 @@ export default Sentry.withSentry(
     const allProvinces = [...new Set([...workProvinces, ...personalProvinces])];
     const allCountries = [...new Set([...workCountries, ...personalCountries])];
     const pct = allStates.length > 0 ? Math.round(allStates.length / 50 * 100) : 0;
+
+    // Merge future trip counts for calculations
+    const allFutureTripCounts = {};
+    Object.keys(workTripsFuture).forEach(k => allFutureTripCounts[k] = (allFutureTripCounts[k] || 0) + workTripsFuture[k]);
+    Object.keys(persTripsFuture).forEach(k => allFutureTripCounts[k] = (allFutureTripCounts[k] || 0) + persTripsFuture[k]);
+
+    // Calculate breakdowns for all states
+    const allStatesPastFuture = splitPastFuture(
+      allStates,
+      [...workFutureStates, ...personalFutureStates],
+      totalTripCounts,
+      allFutureTripCounts
+    );
+    const pastStates = allStatesPastFuture.past;
+    const futureOnlyStates = allStatesPastFuture.futureOnly;
+
+    // Calculate breakdowns for work-only states
+    const workOnlyPastFuture = splitPastFuture(
+      workOnly,
+      workFutureStates,
+      workTripCounts,
+      workTripsFuture
+    );
+
+    // Calculate breakdowns for personal-only states
+    const personalOnlyPastFuture = splitPastFuture(
+      personalOnly,
+      personalFutureStates,
+      persTripCounts,
+      persTripsFuture
+    );
+
+    // Calculate breakdowns for both states
+    const bothStatesPastFuture = splitPastFuture(
+      bothStates,
+      [...workFutureStates, ...personalFutureStates],
+      totalTripCounts,
+      allFutureTripCounts
+    );
 
     // Set Sentry tags for efficient issue filtering
     Sentry.setTag('map.has_data', hasData.toString());
@@ -193,7 +260,14 @@ export default Sentry.withSentry(
       workFutureStates, personalFutureStates, workFutureProvinces, persCountriesFuture,
       workTripCounts, persTripCounts, totalTripCounts,
       workTripsFuture, persTripsFuture,
-      bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title
+      bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title,
+      pastStates, futureOnlyStates,
+      workOnlyPast: workOnlyPastFuture.past,
+      workOnlyFuture: workOnlyPastFuture.futureOnly,
+      personalOnlyPast: personalOnlyPastFuture.past,
+      personalOnlyFuture: personalOnlyPastFuture.futureOnly,
+      bothStatesPast: bothStatesPastFuture.past,
+      bothStatesFuture: bothStatesPastFuture.futureOnly
     });
 
         return new Response(mapHtml, {
@@ -233,7 +307,11 @@ function generateMapHtml(data) {
     workFutureStates, personalFutureStates, workFutureProvinces, persCountriesFuture,
     workTripCounts, persTripCounts, totalTripCounts,
     workTripsFuture, persTripsFuture,
-    bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title
+    bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title,
+    pastStates, futureOnlyStates,
+    workOnlyPast, workOnlyFuture,
+    personalOnlyPast, personalOnlyFuture,
+    bothStatesPast, bothStatesFuture
   } = data;
 
   const stateNames = {
@@ -332,7 +410,11 @@ function generateMapHtml(data) {
     .swatch-both { background: #9c27b0; }
     .swatch-unvisited { background: #dfe6e9; }
     .swatch-upcoming { background: #ff9800; border: 3px dashed #333; }
-    .swatch-future { background: #ff9800; opacity: 0.4; }
+    .swatch-future {
+      background: #03a9f4;
+      opacity: 0.7;
+      border: 2px dashed #0277bd;
+    }
     .map-container {
       background: #fff;
       border-radius: 12px;
@@ -359,6 +441,12 @@ function generateMapHtml(data) {
     .stat-item { display: flex; align-items: center; gap: 5px; }
     .stat-number { font-size: 1.2rem; font-weight: 700; color: #2d3436; }
     .stat-label { color: #636e72; }
+    .stat-breakdown {
+      font-size: 0.85em;
+      color: #888;
+      font-weight: 400;
+      margin-left: 4px;
+    }
     .stat-work { color: #ff9800; font-weight: 600; }
     .stat-personal { color: #e91e63; font-weight: 600; }
     .stat-both { color: #9c27b0; font-weight: 600; }
@@ -402,6 +490,151 @@ function generateMapHtml(data) {
     .region-label-zoom-5 { transform: scale(0.85); opacity: 0.9; }
     .region-label-zoom-6 { transform: scale(1); opacity: 1; }
     .region-label-hidden { display: none; }
+    .error-banner {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #f5c6cb;
+      font-size: 13px;
+    }
+    .error-banner.visible { display: block; }
+    .error-banner h4 { margin: 0 0 4px 0; font-size: 14px; }
+    .error-banner p { margin: 0; }
+    .share-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .share-btn {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .share-btn:hover {
+      background: rgba(255,255,255,0.3);
+      border-color: rgba(255,255,255,0.5);
+    }
+    .share-btn:active {
+      transform: scale(0.95);
+    }
+    .share-btn.success {
+      background: rgba(76, 175, 80, 0.3);
+      border-color: rgba(76, 175, 80, 0.5);
+    }
+    .stats-dashboard {
+      background: rgba(255,255,255,0.95);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    }
+    .stats-dashboard.expanded {
+      max-height: 500px;
+      padding: 16px;
+    }
+    .stats-dashboard.collapsed {
+      padding: 0;
+    }
+    .stats-toggle-btn {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      margin: 0 auto 8px auto;
+      display: block;
+      transition: all 0.2s;
+    }
+    .stats-toggle-btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .dashboard-card {
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #4fc3f7;
+    }
+    .dashboard-card h4 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: #555;
+      font-weight: 600;
+    }
+    .dashboard-card .value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2d3436;
+      margin-bottom: 4px;
+    }
+    .dashboard-card .label {
+      font-size: 11px;
+      color: #888;
+    }
+    .dashboard-list {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0 0;
+    }
+    .dashboard-list li {
+      padding: 4px 0;
+      font-size: 12px;
+      color: #555;
+      display: flex;
+      justify-content: space-between;
+    }
+    .dashboard-list .list-label {
+      font-weight: 500;
+    }
+    .dashboard-list .list-value {
+      color: #888;
+    }
+    .view-filter {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .filter-btn {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    .filter-btn.active {
+      background: rgba(255,255,255,0.4);
+      border-color: rgba(255,255,255,0.6);
+      font-weight: 600;
+    }
     @media (max-width: 768px) {
       body { padding: 8px; }
       h1 { font-size: 1.3rem; }
@@ -410,18 +643,125 @@ function generateMapHtml(data) {
       .stats { gap: 8px; font-size: 11px; padding: 8px; }
       .stat-number { font-size: 1rem; }
     }
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+      .container {
+        max-width: 100%;
+        height: 100vh;
+      }
+      .share-buttons { display: none; }
+      .stats-toggle-btn { display: none; }
+      .stats-dashboard {
+        max-height: none !important;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+      }
+      .error-banner { display: none; }
+      h1 { color: #000; text-shadow: none; }
+      .subtitle { color: #666; }
+      .legend-item { color: #000; }
+      .map-container {
+        page-break-inside: avoid;
+        box-shadow: none;
+      }
+      .leaflet-control-attribution {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>${title}</h1>
     <p class="subtitle">United States, Canada & International</p>
+    <div class="share-buttons">
+      <button class="share-btn" id="copy-url-btn" title="Copy map URL to clipboard">
+        📋 Copy URL
+      </button>
+      <button class="share-btn" id="print-btn" title="Print this map">
+        🖨️ Print
+      </button>
+      <button class="share-btn" id="stats-btn" title="Show detailed statistics">
+        📊 Statistics
+      </button>
+    </div>
+    <button class="stats-toggle-btn" id="stats-toggle" style="display:none;">
+      ▼ Show Statistics Dashboard
+    </button>
+    <div id="stats-dashboard" class="stats-dashboard collapsed">
+      <h3 style="margin: 0 0 12px 0; color: #2d3436; font-size: 16px;">📊 Travel Statistics</h3>
+      <div class="dashboard-grid">
+        <div class="dashboard-card">
+          <h4>Total Locations</h4>
+          <div class="value">${allStates.length + allProvinces.length + allCountries.length}</div>
+          <div class="label">${allStates.length} states, ${allProvinces.length} provinces, ${allCountries.length} countries</div>
+        </div>
+        <div class="dashboard-card">
+          <h4>Total Trips</h4>
+          <div class="value">${Object.values(totalTripCounts).reduce((a, b) => a + b, 0)}</div>
+          <div class="label">${Object.values(workTripCounts).reduce((a, b) => a + b, 0)} work + ${Object.values(persTripCounts).reduce((a, b) => a + b, 0)} personal</div>
+        </div>
+        <div class="dashboard-card">
+          <h4>US Coverage</h4>
+          <div class="value">${pct}%</div>
+          <div class="label">${allStates.length} of 50 states</div>
+        </div>
+        <div class="dashboard-card">
+          <h4>Most Visited</h4>
+          <div class="value">${(() => {
+            const sorted = Object.entries(totalTripCounts).sort((a, b) => b[1] - a[1]);
+            return sorted.length > 0 ? sorted[0][0] : 'N/A';
+          })()}</div>
+          <div class="label">${(() => {
+            const sorted = Object.entries(totalTripCounts).sort((a, b) => b[1] - a[1]);
+            return sorted.length > 0 ? sorted[0][1] + ' trips' : '';
+          })()}</div>
+        </div>
+      </div>
+      <div class="dashboard-grid" style="margin-top: 12px;">
+        <div class="dashboard-card">
+          <h4>Top 5 Destinations</h4>
+          <ul class="dashboard-list">
+            ${Object.entries(totalTripCounts)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([code, count]) => \`<li><span class="list-label">\${code}</span><span class="list-value">\${count} trips</span></li>\`)
+              .join('')}
+          </ul>
+        </div>
+        <div class="dashboard-card">
+          <h4>Trip Breakdown</h4>
+          <ul class="dashboard-list">
+            <li><span class="list-label">Work Only</span><span class="list-value">${workOnlyPast.length + workOnlyFuture.length} locations</span></li>
+            <li><span class="list-label">Personal Only</span><span class="list-value">${personalOnlyPast.length + personalOnlyFuture.length} locations</span></li>
+            <li><span class="list-label">Both</span><span class="list-value">${bothStatesPast.length + bothStatesFuture.length} locations</span></li>
+            ${futureOnlyStates.length > 0 ? \`<li><span class="list-label">Future Only</span><span class="list-value">\${futureOnlyStates.length} locations</span></li>\` : ''}
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div id="error-banner" class="error-banner">
+      <h4>Map Loading Error</h4>
+      <p id="error-message"></p>
+    </div>
+    <div class="view-filter">
+      <button class="filter-btn active" data-view="all">All Trips</button>
+      <button class="filter-btn" data-view="work">Work Only</button>
+      <button class="filter-btn" data-view="personal">Personal Only</button>
+      <button class="filter-btn" data-view="past">Past Only</button>
+      <button class="filter-btn" data-view="future">Future Only</button>
+    </div>
     <div class="legend">
       <div class="legend-item"><span class="legend-swatch swatch-work"></span> Work</div>
       <div class="legend-item"><span class="legend-swatch swatch-personal"></span> Personal</div>
       <div class="legend-item"><span class="legend-swatch swatch-both"></span> Both</div>
       <div class="legend-item"><span class="legend-swatch swatch-upcoming"></span> + Upcoming</div>
       <div class="legend-item"><span class="legend-swatch swatch-future"></span> Future Only</div>
+      <div class="legend-item"><span style="font-weight: 600; font-size: 14px;">*</span> = has upcoming</div>
     </div>
     <div class="map-container">
       <div id="map"></div>
@@ -429,13 +769,25 @@ function generateMapHtml(data) {
         <div class="stat-item">
           <span class="stat-number">${allStates.length}</span>
           <span class="stat-label">/ 50 states (${pct}%)</span>
+          ${futureOnlyStates.length > 0 ?
+            `<span class="stat-breakdown">(${pastStates.length} past, ${futureOnlyStates.length} future)</span>`
+            : ''}
         </div>
         <div class="stat-divider"></div>
-        <span class="stat-work">${workOnly.length} work</span>
+        <span class="stat-work">${workOnlyPast.length} work</span>
+        ${workOnlyFuture.length > 0 ?
+          `<span class="stat-breakdown">(+${workOnlyFuture.length} future)</span>`
+          : ''}
         <div class="stat-divider"></div>
-        <span class="stat-personal">${personalOnly.length} personal</span>
+        <span class="stat-personal">${personalOnlyPast.length} personal</span>
+        ${personalOnlyFuture.length > 0 ?
+          `<span class="stat-breakdown">(+${personalOnlyFuture.length} future)</span>`
+          : ''}
         <div class="stat-divider"></div>
-        <span class="stat-both">${bothStates.length} both</span>
+        <span class="stat-both">${bothStatesPast.length} both</span>
+        ${bothStatesFuture.length > 0 ?
+          `<span class="stat-breakdown">(+${bothStatesFuture.length} future)</span>`
+          : ''}
         ${allProvinces.length > 0 ? `<div class="stat-divider"></div><span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>` : ''}
         ${allCountries.length > 0 ? `<div class="stat-divider"></div><span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>` : ''}
       </div>
@@ -444,6 +796,121 @@ function generateMapHtml(data) {
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script>
+    // Show user-visible error messages
+    function showError(message) {
+      console.error('Map Error:', message);
+      const errorBanner = document.getElementById('error-banner');
+      const errorMessage = document.getElementById('error-message');
+      if (errorBanner && errorMessage) {
+        errorMessage.textContent = message;
+        errorBanner.classList.add('visible');
+      }
+    }
+
+    // Share/Export functionality
+    document.getElementById('copy-url-btn').addEventListener('click', function() {
+      const url = window.location.href;
+      navigator.clipboard.writeText(url).then(function() {
+        const btn = document.getElementById('copy-url-btn');
+        btn.classList.add('success');
+        btn.textContent = '✓ Copied!';
+        setTimeout(function() {
+          btn.classList.remove('success');
+          btn.textContent = '📋 Copy URL';
+        }, 2000);
+      }).catch(function(err) {
+        console.error('Failed to copy URL:', err);
+        alert('Failed to copy URL. Please copy manually: ' + url);
+      });
+    });
+
+    document.getElementById('print-btn').addEventListener('click', function() {
+      window.print();
+    });
+
+    document.getElementById('stats-btn').addEventListener('click', function() {
+      const dashboard = document.getElementById('stats-dashboard');
+      const toggle = document.getElementById('stats-toggle');
+      if (toggle.style.display === 'none') {
+        toggle.style.display = 'block';
+        toggle.click(); // Auto-expand on first click
+      } else {
+        toggle.click();
+      }
+    });
+
+    document.getElementById('stats-toggle').addEventListener('click', function() {
+      const dashboard = document.getElementById('stats-dashboard');
+      const btn = this;
+      if (dashboard.classList.contains('expanded')) {
+        dashboard.classList.remove('expanded');
+        dashboard.classList.add('collapsed');
+        btn.textContent = '▼ Show Statistics Dashboard';
+      } else {
+        dashboard.classList.remove('collapsed');
+        dashboard.classList.add('expanded');
+        btn.textContent = '▲ Hide Statistics Dashboard';
+      }
+    });
+
+    // View filter functionality - will be connected after map layers are created
+    let currentView = 'all';
+    let mapLayers = { states: null, provinces: null, countries: null };
+
+    document.querySelectorAll('.filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        // Update active button
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+
+        currentView = this.getAttribute('data-view');
+        applyViewFilter(currentView);
+      });
+    });
+
+    function applyViewFilter(view) {
+      console.log('Applying view filter:', view);
+
+      // Iterate through all layer features and update their style
+      if (mapLayers.states) {
+        mapLayers.states.eachLayer(function(layer) {
+          const code = layer.locationCode;
+          const visible = shouldShowLocation(code, 'state', view);
+          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+        });
+      }
+
+      if (mapLayers.provinces) {
+        mapLayers.provinces.eachLayer(function(layer) {
+          const code = layer.locationCode;
+          const visible = shouldShowLocation(code, 'province', view);
+          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+        });
+      }
+
+      if (mapLayers.countries) {
+        mapLayers.countries.eachLayer(function(layer) {
+          const code = layer.locationCode;
+          const visible = shouldShowLocation(code, 'country', view);
+          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+        });
+      }
+    }
+
+    function shouldShowLocation(code, locationType, view) {
+      const info = getTripInfo(code);
+      const hasPastWork = info.workPast > 0;
+      const hasPastPersonal = info.persPast > 0;
+      const hasFuture = hasFutureTrips(code, locationType);
+
+      if (view === 'all') return true;
+      if (view === 'work') return hasPastWork || (workStates.includes(code) || workProvinces.includes(code) || workCountries.includes(code));
+      if (view === 'personal') return hasPastPersonal || (personalStates.includes(code) || personalProvinces.includes(code) || personalCountries.includes(code));
+      if (view === 'past') return (hasPastWork || hasPastPersonal) && !hasFuture;
+      if (view === 'future') return hasFuture;
+      return true;
+    }
+
     const workStates = ${JSON.stringify(workStates)};
     const personalStates = ${JSON.stringify(personalStates)};
     const workProvinces = ${JSON.stringify(workProvinces)};
@@ -537,19 +1004,26 @@ function generateMapHtml(data) {
     map.on('zoomend', updateLabelsForZoom);
 
     function addRegionLabel(layer, code, locationType) {
-      const count = totalTripCounts[code] || 0;
-      if (count === 0) return; // Only add labels for regions with trip counts
+      const info = getTripInfo(code);
+      const pastCount = info.workPast + info.persPast;
+      const futureCount = info.workFuture + info.persFuture;
 
-      // Get the center of the feature bounds
+      // Only show labels for regions with past trips (future-only regions have no label)
+      if (pastCount === 0) return;
+
+      // Show past count with asterisk if future trips exist
+      let labelText = pastCount.toString();
+      if (futureCount > 0) {
+        labelText += '*';
+      }
+
       const bounds = layer.getBounds();
       const center = bounds.getCenter();
-
-      // Get initial zoom class
       const zoomClass = getZoomClass(map.getZoom(), locationType);
 
       const icon = L.divIcon({
         className: 'region-label ' + zoomClass,
-        html: count.toString(),
+        html: labelText,
         iconSize: null,
         iconAnchor: [0, 0]
       });
@@ -560,7 +1034,6 @@ function generateMapHtml(data) {
         interactive: false
       }).addTo(map);
 
-      // Store reference for zoom updates
       regionLabels.push({ marker, locationType });
     }
 
@@ -654,7 +1127,7 @@ function generateMapHtml(data) {
         case 'work': return { color: '#ff9800', opacity };
         case 'personal': return { color: '#e91e63', opacity };
         case 'both': return { color: '#9c27b0', opacity };
-        case 'futureOnly': return { color: '#ff9800', opacity: 0.35 };
+        case 'futureOnly': return { color: '#03a9f4', opacity: 0.5 };  // Light blue
         default: return { color: '#dfe6e9', opacity: 0.7 };
       }
     }
@@ -683,18 +1156,21 @@ function generateMapHtml(data) {
         style.color = '#333';
       }
       
-      // Future only styling
+      // Future only styling - light blue with prominent dashed border
       if (category === 'futureOnly') {
-        style.fillOpacity = 0.35;
-        style.weight = 1.5;
-        style.color = color;
+        style.fillColor = '#03a9f4'; // Light blue
+        style.fillOpacity = 0.5;
+        style.weight = 3;
+        style.dashArray = '8,4';
+        style.color = '#0277bd'; // Darker blue border for contrast
       }
       
       return style;
     }
 
     function styleState(feature) {
-      const code = fipsToState[feature.id] || feature.properties.STUSPS || feature.properties.postal || '';
+      // Natural Earth uses 'postal' property for 2-letter state codes
+      const code = feature.properties.postal || feature.properties.code_hasc?.split('-')[1] || feature.properties.STUSPS || '';
       return styleFeature(code, 'state');
     }
 
@@ -768,7 +1244,7 @@ function generateMapHtml(data) {
         case 'work': statusText = 'Work'; statusColor = '#ff9800'; break;
         case 'personal': statusText = 'Personal'; statusColor = '#e91e63'; break;
         case 'both': statusText = 'Work + Personal'; statusColor = '#9c27b0'; break;
-        case 'futureOnly': statusText = 'Future trips planned'; statusColor = '#ff9800'; break;
+        case 'futureOnly': statusText = 'Future trips planned'; statusColor = '#03a9f4'; break;
         default: statusText = 'Not visited'; statusColor = '#999';
       }
       
@@ -798,9 +1274,70 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
+    // Fetch helper with KV caching, timeout and retry logic
+    async function fetchGeoDataWithCache(env, cacheKey, url, retries = 3, timeout = 10000) {
+      // Try KV cache first (if available)
+      if (env.GEO_CACHE) {
+        try {
+          const cached = await env.GEO_CACHE.get(cacheKey, { type: 'json' });
+          if (cached) {
+            console.log(\`Cache HIT for \${cacheKey}\`);
+            return cached;
+          }
+          console.log(\`Cache MISS for \${cacheKey}\`);
+        } catch (err) {
+          console.warn('KV cache read failed:', err.message);
+          // Continue to fetch from source
+        }
+      }
+
+      // Fetch from source with retry logic
+      for (let i = 0; i < retries; i++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
+          }
+          const data = await response.json();
+
+          // Store in KV cache for future requests (24 hour TTL)
+          if (env.GEO_CACHE) {
+            try {
+              await env.GEO_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: 86400 });
+              console.log(\`Cached \${cacheKey} for 24 hours\`);
+            } catch (err) {
+              console.warn('KV cache write failed:', err.message);
+              // Non-fatal - continue with data
+            }
+          }
+
+          return data;
+        } catch (err) {
+          const isLastRetry = i === retries - 1;
+          console.error(\`Fetch attempt \${i + 1}/\${retries} failed for \${url}:\`, err.message);
+
+          if (isLastRetry) {
+            throw new Error(\`Failed to fetch \${url} after \${retries} attempts: \${err.message}\`);
+          }
+
+          // Exponential backoff: wait 1s, 2s, 4s...
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+        }
+      }
+    }
+
     // Fetch countries (Natural Earth map_units - includes UK subdivisions like ENG, SCT, WLS, NIR, IRL)
-    fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_map_units.geojson')
-      .then(r => r.json())
+    // Using 50m resolution for better island coverage (Florida Keys, Hawaii islands, Caribbean, etc.)
+    fetchGeoDataWithCache(
+      env,
+      'geo_countries_50m',
+      'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_map_units.geojson'
+    )
       .then(data => {
         data.features = data.features.filter(f => {
           const code = getCountryCode(f.properties, f.id);
@@ -821,28 +1358,53 @@ function generateMapHtml(data) {
             }
           }
         }).addTo(map);
+        mapLayers.countries = layer;
       })
-      .catch(err => console.error('Error loading countries:', err));
+      .catch(err => {
+        console.error('Error loading countries:', err);
+        showError('Unable to load country map data. Please refresh the page to try again.');
+      });
 
-    fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
-      .then(r => r.json())
+    // Using Natural Earth 50m US states for better island coverage (includes Florida Keys, Aleutian Islands, etc.)
+    fetchGeoDataWithCache(
+      env,
+      'geo_states_provinces_50m',
+      'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
+    )
       .then(data => {
+        // Filter for only US states (iso_a2 === 'US')
+        data.features = data.features.filter(f => f.properties.iso_a2 === 'US');
+
         const layer = L.geoJson(data, {
           style: styleState,
           pane: 'states',
           onEachFeature: (f, l) => {
-            const code = fipsToState[f.id] || f.properties.STUSPS || '';
+            // Natural Earth uses 'postal' property for 2-letter state codes
+            const code = f.properties.postal || f.properties.code_hasc?.split('-')[1] || '';
             l.locationType = 'state';
             l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
             addRegionLabel(l, code, 'state');
           }
         }).addTo(map);
+        mapLayers.states = layer;
+      })
+      .catch(err => {
+        console.error('Error loading US states:', err);
+        showError('Unable to load US states map data. Please refresh the page to try again.');
       });
 
-    fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/canada.geojson')
-      .then(r => r.json())
+    // Using Natural Earth 50m provinces for better island coverage (includes Canadian Arctic islands, etc.)
+    // Note: Uses same data source as US states above, so will benefit from shared cache
+    fetchGeoDataWithCache(
+      env,
+      'geo_states_provinces_50m',
+      'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
+    )
       .then(data => {
+        // Filter for only Canadian provinces (iso_a2 === 'CA')
+        data.features = data.features.filter(f => f.properties.iso_a2 === 'CA');
+
         const layer = L.geoJson(data, {
           style: styleProvince,
           pane: 'provinces',
@@ -854,6 +1416,11 @@ function generateMapHtml(data) {
             addRegionLabel(l, code, 'province');
           }
         }).addTo(map);
+        mapLayers.provinces = layer;
+      })
+      .catch(err => {
+        console.error('Error loading Canadian provinces:', err);
+        showError('Unable to load Canadian provinces map data. Please refresh the page to try again.');
       });
   </script>
 </body>
