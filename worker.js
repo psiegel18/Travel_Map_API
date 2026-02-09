@@ -729,7 +729,7 @@ function generateMapHtml(data) {
             ${Object.entries(totalTripCounts)
               .sort((a, b) => b[1] - a[1])
               .slice(0, 5)
-              .map(([code, count]) => \`<li><span class="list-label">\${code}</span><span class="list-value">\${count} trips</span></li>\`)
+              .map(([code, count]) => `<li><span class="list-label">${code}</span><span class="list-value">${count} trips</span></li>`)
               .join('')}
           </ul>
         </div>
@@ -739,7 +739,7 @@ function generateMapHtml(data) {
             <li><span class="list-label">Work Only</span><span class="list-value">${workOnlyPast.length + workOnlyFuture.length} locations</span></li>
             <li><span class="list-label">Personal Only</span><span class="list-value">${personalOnlyPast.length + personalOnlyFuture.length} locations</span></li>
             <li><span class="list-label">Both</span><span class="list-value">${bothStatesPast.length + bothStatesFuture.length} locations</span></li>
-            ${futureOnlyStates.length > 0 ? \`<li><span class="list-label">Future Only</span><span class="list-value">\${futureOnlyStates.length} locations</span></li>\` : ''}
+            ${futureOnlyStates.length > 0 ? `<li><span class="list-label">Future Only</span><span class="list-value">${futureOnlyStates.length} locations</span></li>` : ''}
           </ul>
         </div>
       </div>
