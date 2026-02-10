@@ -148,14 +148,14 @@ export default Sentry.withSentry(
     const persProvFuture = []; // Personal future provinces not yet supported as separate parameter
     const persCountriesFuture = validateCodes(persCountriesFutureParam.split(','), VALID_COUNTRIES, 3);
 
-    // Combine valid sets for trip count validation (states + provinces for work/personal)
-    const VALID_STATE_PROV = new Set([...VALID_STATES, ...VALID_PROVINCES]);
+    // Combine valid sets for trip count validation (states + provinces + countries)
+    const VALID_STATE_PROV_COUNTRY = new Set([...VALID_STATES, ...VALID_PROVINCES, ...VALID_COUNTRIES]);
 
-    // Parse and validate trip counts
-    const workTripCounts = parseTripCounts(workTripsParam, VALID_STATE_PROV);
-    const persTripCounts = parseTripCounts(persTripsParam, VALID_STATE_PROV);
-    const workTripsFuture = parseTripCounts(workTripsFutureParam, VALID_STATE_PROV);
-    const persTripsFuture = parseTripCounts(persTripsFutureParam, VALID_STATE_PROV);
+    // Parse and validate trip counts (now including countries)
+    const workTripCounts = parseTripCounts(workTripsParam, VALID_STATE_PROV_COUNTRY);
+    const persTripCounts = parseTripCounts(persTripsParam, VALID_STATE_PROV_COUNTRY);
+    const workTripsFuture = parseTripCounts(workTripsFutureParam, VALID_STATE_PROV_COUNTRY);
+    const persTripsFuture = parseTripCounts(persTripsFutureParam, VALID_STATE_PROV_COUNTRY);
 
     // Helper function to split locations into past and future-only categories
     function splitPastFuture(allLocations, futureLocations, tripCounts, futureTripCounts) {
@@ -568,13 +568,8 @@ function generateMapHtml(data) {
     .stat-both { color: #9c27b0; font-weight: 600; }
     .stat-prov { color: #00bcd4; font-weight: 600; }
     .stat-country { color: #4caf50; font-weight: 600; }
+    .stat-total { color: #2d3436; font-weight: 600; font-size: 13px; }
     .stat-divider { width: 1px; height: 18px; background: #ddd; }
-    .stat-section-divider {
-      width: 3px;
-      height: 24px;
-      background: linear-gradient(to bottom, transparent, #999, transparent);
-      margin: 0 4px;
-    }
     .info-box {
       padding: 8px 12px;
       background: white;
@@ -896,65 +891,28 @@ function generateMapHtml(data) {
             `<span class="stat-breakdown">(${pastStates.length} past, ${futureOnlyStates.length} future)</span>`
             : ''}
         </div>
-        <div class="stat-divider"></div>
-        <span class="stat-work">${workOnlyPast.length} work</span>
-        ${workOnlyFuture.length > 0 ?
-          `<span class="stat-breakdown">(+${workOnlyFuture.length} future)</span>`
-          : ''}
-        <div class="stat-divider"></div>
-        <span class="stat-personal">${personalOnlyPast.length} personal</span>
-        ${personalOnlyFuture.length > 0 ?
-          `<span class="stat-breakdown">(+${personalOnlyFuture.length} future)</span>`
-          : ''}
-        <div class="stat-divider"></div>
-        <span class="stat-both">${bothStatesPast.length} both</span>
-        ${bothStatesFuture.length > 0 ?
-          `<span class="stat-breakdown">(+${bothStatesFuture.length} future)</span>`
-          : ''}
         ${allProvinces.length > 0 ? `
-          <div class="stat-section-divider"></div>
-          <span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>
-          ${futureOnlyProvinces.length > 0 ?
-            `<span class="stat-breakdown">(${pastProvinces.length} past, ${futureOnlyProvinces.length} future)</span>`
-            : ''}
           <div class="stat-divider"></div>
-          <span class="stat-work">${workOnlyProvPast.length} work</span>
-          ${workOnlyProvFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${workOnlyProvFuture.length} future)</span>`
-            : ''}
-          <div class="stat-divider"></div>
-          <span class="stat-personal">${personalOnlyProvPast.length} personal</span>
-          ${personalOnlyProvFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${personalOnlyProvFuture.length} future)</span>`
-            : ''}
-          <div class="stat-divider"></div>
-          <span class="stat-both">${bothProvPast.length} both</span>
-          ${bothProvFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${bothProvFuture.length} future)</span>`
-            : ''}
+          <div class="stat-item">
+            <span class="stat-number">${allProvinces.length}</span>
+            <span class="stat-label">province${allProvinces.length > 1 ? 's' : ''}</span>
+            ${futureOnlyProvinces.length > 0 ?
+              `<span class="stat-breakdown">(${pastProvinces.length} past, ${futureOnlyProvinces.length} future)</span>`
+              : ''}
+          </div>
         ` : ''}
         ${allCountries.length > 0 ? `
-          <div class="stat-section-divider"></div>
-          <span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>
-          ${futureOnlyCountries.length > 0 ?
-            `<span class="stat-breakdown">(${pastCountries.length} past, ${futureOnlyCountries.length} future)</span>`
-            : ''}
           <div class="stat-divider"></div>
-          <span class="stat-work">${workOnlyCountriesPast.length} work</span>
-          ${workOnlyCountriesFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${workOnlyCountriesFuture.length} future)</span>`
-            : ''}
-          <div class="stat-divider"></div>
-          <span class="stat-personal">${personalOnlyCountriesPast.length} personal</span>
-          ${personalOnlyCountriesFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${personalOnlyCountriesFuture.length} future)</span>`
-            : ''}
-          <div class="stat-divider"></div>
-          <span class="stat-both">${bothCountriesPast.length} both</span>
-          ${bothCountriesFuture.length > 0 ?
-            `<span class="stat-breakdown">(+${bothCountriesFuture.length} future)</span>`
-            : ''}
+          <div class="stat-item">
+            <span class="stat-number">${allCountries.length}</span>
+            <span class="stat-label">${allCountries.length > 1 ? 'countries' : 'country'}</span>
+            ${futureOnlyCountries.length > 0 ?
+              `<span class="stat-breakdown">(${pastCountries.length} past, ${futureOnlyCountries.length} future)</span>`
+              : ''}
+          </div>
         ` : ''}
+        <div class="stat-divider"></div>
+        <span class="stat-total">${totalTripCounts && Object.values(totalTripCounts).length > 0 ? Object.values(totalTripCounts).reduce((a, b) => a + b, 0) : 0} total trips</span>
       </div>
     </div>
   </div>
@@ -1381,10 +1339,15 @@ function generateMapHtml(data) {
         // For countries, check array membership (may not have trip counts)
         const inWork = workCountries.includes(code);
         const inPers = personalCountries.includes(code);
+        const inFuturePers = persCountriesFuture.includes(code);
+
+        // Check if this is ONLY future trips (no past trips at all)
+        if (!hasPastWork && !hasPastPersonal && (inFuturePers || hasFuture)) return 'futureOnly';
+
+        // Then check for past trips
         if ((inWork && inPers) || (hasPastWork && hasPastPersonal)) return 'both';
         if (inWork || hasPastWork) return 'work';
         if (inPers || hasPastPersonal) return 'personal';
-        if (hasFuture) return 'futureOnly';
         return 'unvisited';
       }
       if (locationType === 'province') {
