@@ -544,8 +544,9 @@ function generateMapHtml(data) {
       transition: max-height 0.3s ease-out, padding 0.3s ease-out;
     }
     .stats-dashboard.expanded {
-      max-height: 500px;
+      max-height: 600px;
       padding: 16px;
+      overflow-y: auto;
     }
     .stats-dashboard.collapsed {
       padding: 0;
@@ -810,19 +811,92 @@ function generateMapHtml(data) {
     // Share/Export functionality
     document.getElementById('copy-url-btn').addEventListener('click', function() {
       const url = window.location.href;
-      navigator.clipboard.writeText(url).then(function() {
-        const btn = document.getElementById('copy-url-btn');
-        btn.classList.add('success');
-        btn.textContent = '✓ Copied!';
-        setTimeout(function() {
-          btn.classList.remove('success');
-          btn.textContent = '📋 Copy URL';
-        }, 2000);
-      }).catch(function(err) {
-        console.error('Failed to copy URL:', err);
-        alert('Failed to copy URL. Please copy manually: ' + url);
-      });
+
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+          const btn = document.getElementById('copy-url-btn');
+          btn.classList.add('success');
+          btn.textContent = '✓ Copied!';
+          setTimeout(function() {
+            btn.classList.remove('success');
+            btn.textContent = '📋 Copy URL';
+          }, 2000);
+        }).catch(function(err) {
+          console.error('Clipboard API failed:', err);
+          fallbackCopyURL(url);
+        });
+      } else {
+        // Fallback for older browsers or iframe contexts
+        fallbackCopyURL(url);
+      }
     });
+
+    function fallbackCopyURL(url) {
+      // Create temporary text area
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      textArea.style.position = 'fixed';
+      textArea.style.top = '50%';
+      textArea.style.left = '50%';
+      textArea.style.transform = 'translate(-50%, -50%)';
+      textArea.style.width = '80%';
+      textArea.style.maxWidth = '600px';
+      textArea.style.padding = '20px';
+      textArea.style.fontSize = '14px';
+      textArea.style.zIndex = '10000';
+      textArea.style.backgroundColor = 'white';
+      textArea.style.border = '2px solid #4fc3f7';
+      textArea.style.borderRadius = '8px';
+      textArea.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          const btn = document.getElementById('copy-url-btn');
+          btn.classList.add('success');
+          btn.textContent = '✓ Copied!';
+          setTimeout(function() {
+            btn.classList.remove('success');
+            btn.textContent = '📋 Copy URL';
+          }, 2000);
+          document.body.removeChild(textArea);
+        } else {
+          // If copy failed, keep the text area visible so user can manually copy
+          const instruction = document.createElement('div');
+          instruction.textContent = 'Press Ctrl+C (Cmd+C on Mac) to copy, then click anywhere to close';
+          instruction.style.position = 'fixed';
+          instruction.style.top = 'calc(50% - 80px)';
+          instruction.style.left = '50%';
+          instruction.style.transform = 'translateX(-50%)';
+          instruction.style.backgroundColor = '#4fc3f7';
+          instruction.style.color = 'white';
+          instruction.style.padding = '10px 20px';
+          instruction.style.borderRadius = '8px';
+          instruction.style.fontSize = '13px';
+          instruction.style.zIndex = '10001';
+          document.body.appendChild(instruction);
+
+          // Remove on click anywhere
+          const cleanup = function() {
+            if (document.body.contains(textArea)) document.body.removeChild(textArea);
+            if (document.body.contains(instruction)) document.body.removeChild(instruction);
+            document.removeEventListener('click', cleanup);
+          };
+          setTimeout(function() {
+            document.addEventListener('click', cleanup);
+          }, 100);
+        }
+      } catch (err) {
+        console.error('Fallback copy failed:', err);
+        document.body.removeChild(textArea);
+        alert('Copy failed. URL: ' + url);
+      }
+    }
 
     document.getElementById('print-btn').addEventListener('click', function() {
       window.print();
@@ -876,7 +950,25 @@ function generateMapHtml(data) {
         mapLayers.states.eachLayer(function(layer) {
           const code = layer.locationCode;
           const visible = shouldShowLocation(code, 'state', view);
-          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+
+          // Store original style if not already stored
+          if (!layer._originalStyle) {
+            layer._originalStyle = {
+              fillOpacity: layer.options.fillOpacity,
+              opacity: layer.options.opacity,
+              weight: layer.options.weight,
+              color: layer.options.color,
+              dashArray: layer.options.dashArray
+            };
+          }
+
+          if (visible) {
+            // Restore original style
+            layer.setStyle(layer._originalStyle);
+          } else {
+            // Hide the layer
+            layer.setStyle({ fillOpacity: 0, opacity: 0 });
+          }
         });
       }
 
@@ -884,7 +976,25 @@ function generateMapHtml(data) {
         mapLayers.provinces.eachLayer(function(layer) {
           const code = layer.locationCode;
           const visible = shouldShowLocation(code, 'province', view);
-          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+
+          // Store original style if not already stored
+          if (!layer._originalStyle) {
+            layer._originalStyle = {
+              fillOpacity: layer.options.fillOpacity,
+              opacity: layer.options.opacity,
+              weight: layer.options.weight,
+              color: layer.options.color,
+              dashArray: layer.options.dashArray
+            };
+          }
+
+          if (visible) {
+            // Restore original style
+            layer.setStyle(layer._originalStyle);
+          } else {
+            // Hide the layer
+            layer.setStyle({ fillOpacity: 0, opacity: 0 });
+          }
         });
       }
 
@@ -892,7 +1002,25 @@ function generateMapHtml(data) {
         mapLayers.countries.eachLayer(function(layer) {
           const code = layer.locationCode;
           const visible = shouldShowLocation(code, 'country', view);
-          layer.setStyle({ fillOpacity: visible ? layer.options.fillOpacity : 0, opacity: visible ? 1 : 0 });
+
+          // Store original style if not already stored
+          if (!layer._originalStyle) {
+            layer._originalStyle = {
+              fillOpacity: layer.options.fillOpacity,
+              opacity: layer.options.opacity,
+              weight: layer.options.weight,
+              color: layer.options.color,
+              dashArray: layer.options.dashArray
+            };
+          }
+
+          if (visible) {
+            // Restore original style
+            layer.setStyle(layer._originalStyle);
+          } else {
+            // Hide the layer
+            layer.setStyle({ fillOpacity: 0, opacity: 0 });
+          }
         });
       }
     }
@@ -1100,10 +1228,14 @@ function generateMapHtml(data) {
         const inWork = workProvinces.includes(code);
         const inPers = personalProvinces.includes(code);
         const inFutureWork = workFutureProvinces.includes(code);
+
+        // Check if this is ONLY future trips (no past trips at all)
+        if (!hasPastWork && !hasPastPersonal && (inFutureWork || hasFuture)) return 'futureOnly';
+
+        // Then check for past trips
         if ((inWork && inPers) || (hasPastWork && hasPastPersonal)) return 'both';
         if (inWork || hasPastWork) return 'work';
         if (inPers || hasPastPersonal) return 'personal';
-        if (inFutureWork) return 'futureOnly';
         return 'unvisited';
       }
       // State - check array membership AND trip counts
