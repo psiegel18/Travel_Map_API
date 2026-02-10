@@ -272,6 +272,45 @@ export default Sentry.withSentry(
       allFutureTripCounts
     );
 
+    // Calculate country breakdowns (similar to states and provinces)
+    const bothCountries = workCountries.filter(c => personalCountries.includes(c));
+    const workOnlyCountries = workCountries.filter(c => !personalCountries.includes(c));
+    const personalOnlyCountries = personalCountries.filter(c => !workCountries.includes(c));
+
+    // Calculate breakdowns for all countries
+    const allCountriesPastFuture = splitPastFuture(
+      allCountries,
+      [...persCountriesFuture],
+      totalTripCounts,
+      allFutureTripCounts
+    );
+    const pastCountries = allCountriesPastFuture.past;
+    const futureOnlyCountries = allCountriesPastFuture.futureOnly;
+
+    // Calculate breakdowns for work-only countries (no work future countries parameter exists yet)
+    const workOnlyCountriesPastFuture = splitPastFuture(
+      workOnlyCountries,
+      [],
+      workTripCounts,
+      workTripsFuture
+    );
+
+    // Calculate breakdowns for personal-only countries
+    const personalOnlyCountriesPastFuture = splitPastFuture(
+      personalOnlyCountries,
+      persCountriesFuture,
+      persTripCounts,
+      persTripsFuture
+    );
+
+    // Calculate breakdowns for both countries
+    const bothCountriesPastFuture = splitPastFuture(
+      bothCountries,
+      [...persCountriesFuture],
+      totalTripCounts,
+      allFutureTripCounts
+    );
+
     // Calculate total country count (USA + Canada + international)
     const totalCountries = (allStates.length > 0 ? 1 : 0) + (allProvinces.length > 0 ? 1 : 0) + allCountries.length;
 
@@ -320,6 +359,15 @@ export default Sentry.withSentry(
       personalOnlyProvFuture: personalOnlyProvPastFuture.futureOnly,
       bothProvPast: bothProvPastFuture.past,
       bothProvFuture: bothProvPastFuture.futureOnly,
+      // Country breakdowns
+      bothCountries, workOnlyCountries, personalOnlyCountries,
+      pastCountries, futureOnlyCountries,
+      workOnlyCountriesPast: workOnlyCountriesPastFuture.past,
+      workOnlyCountriesFuture: workOnlyCountriesPastFuture.futureOnly,
+      personalOnlyCountriesPast: personalOnlyCountriesPastFuture.past,
+      personalOnlyCountriesFuture: personalOnlyCountriesPastFuture.futureOnly,
+      bothCountriesPast: bothCountriesPastFuture.past,
+      bothCountriesFuture: bothCountriesPastFuture.futureOnly,
       // Total country count
       totalCountries
     });
@@ -372,6 +420,12 @@ function generateMapHtml(data) {
     workOnlyProvPast, workOnlyProvFuture,
     personalOnlyProvPast, personalOnlyProvFuture,
     bothProvPast, bothProvFuture,
+    // Country breakdowns
+    bothCountries, workOnlyCountries, personalOnlyCountries,
+    pastCountries, futureOnlyCountries,
+    workOnlyCountriesPast, workOnlyCountriesFuture,
+    personalOnlyCountriesPast, personalOnlyCountriesFuture,
+    bothCountriesPast, bothCountriesFuture,
     // Total country count
     totalCountries
   } = data;
@@ -873,7 +927,28 @@ function generateMapHtml(data) {
             `<span class="stat-breakdown">(+${bothProvFuture.length} future)</span>`
             : ''}
         ` : ''}
-        ${totalCountries > 0 ? `<div class="stat-divider"></div><span class="stat-country">${totalCountries} ${totalCountries > 1 ? 'countries' : 'country'}</span>` : ''}
+        ${allCountries.length > 0 ? `
+          <div class="stat-divider"></div>
+          <span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>
+          ${futureOnlyCountries.length > 0 ?
+            `<span class="stat-breakdown">(${pastCountries.length} past, ${futureOnlyCountries.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-work">${workOnlyCountriesPast.length} work</span>
+          ${workOnlyCountriesFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${workOnlyCountriesFuture.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-personal">${personalOnlyCountriesPast.length} personal</span>
+          ${personalOnlyCountriesFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${personalOnlyCountriesFuture.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-both">${bothCountriesPast.length} both</span>
+          ${bothCountriesFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${bothCountriesFuture.length} future)</span>`
+            : ''}
+        ` : ''}
       </div>
     </div>
   </div>
