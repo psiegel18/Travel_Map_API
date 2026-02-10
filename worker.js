@@ -569,6 +569,12 @@ function generateMapHtml(data) {
     .stat-prov { color: #00bcd4; font-weight: 600; }
     .stat-country { color: #4caf50; font-weight: 600; }
     .stat-divider { width: 1px; height: 18px; background: #ddd; }
+    .stat-section-divider {
+      width: 3px;
+      height: 24px;
+      background: linear-gradient(to bottom, transparent, #999, transparent);
+      margin: 0 4px;
+    }
     .info-box {
       padding: 8px 12px;
       background: white;
@@ -906,7 +912,7 @@ function generateMapHtml(data) {
           `<span class="stat-breakdown">(+${bothStatesFuture.length} future)</span>`
           : ''}
         ${allProvinces.length > 0 ? `
-          <div class="stat-divider"></div>
+          <div class="stat-section-divider"></div>
           <span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>
           ${futureOnlyProvinces.length > 0 ?
             `<span class="stat-breakdown">(${pastProvinces.length} past, ${futureOnlyProvinces.length} future)</span>`
@@ -928,7 +934,7 @@ function generateMapHtml(data) {
             : ''}
         ` : ''}
         ${allCountries.length > 0 ? `
-          <div class="stat-divider"></div>
+          <div class="stat-section-divider"></div>
           <span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>
           ${futureOnlyCountries.length > 0 ?
             `<span class="stat-breakdown">(${pastCountries.length} past, ${futureOnlyCountries.length} future)</span>`
