@@ -106,7 +106,7 @@ export default Sentry.withSentry(
     // Valid code sets for input validation
     const VALID_STATES = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC']);
     const VALID_PROVINCES = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT']);
-    const VALID_COUNTRIES = new Set(['AFG','ALB','DZA','ARG','AUS','AUT','BHS','BEL','BLZ','BRA','BGR','KHM','CHL','CHN','COL','CRI','HRV','CUB','CZE','DNK','DOM','ECU','EGY','EST','FIN','FRA','DEU','GRC','GTM','HND','HUN','ISL','IND','IDN','IRL','ISR','ITA','JAM','JPN','KEN','LVA','LTU','LUX','MYS','MEX','MAR','NLD','NZL','NIC','NOR','PAN','PER','PHL','POL','PRT','PRI','ROU','RUS','SGP','SVK','SVN','ZAF','KOR','ESP','SWE','CHE','TWN','THA','TUR','GBR','UKR','URY','VAT','VEN','VNM','ENG','SCT','WLS','NIR']);
+    const VALID_COUNTRIES = new Set(['AFG','ALB','DZA','ARG','AUS','AUT','BHS','BEL','BLZ','BRA','BGR','KHM','CHL','CHN','COL','CRI','HRV','CUB','CZE','DNK','DOM','ECU','EGY','EST','FIN','FRA','DEU','GRC','GTM','HND','HTI','HUN','ISL','IND','IDN','IRL','ISR','ITA','JAM','JPN','KEN','LVA','LTU','LUX','MYS','MEX','MAR','NLD','NZL','NIC','NOR','PAN','PER','PHL','POL','PRT','PRI','ROU','RUS','SGP','SVK','SVN','ZAF','KOR','ESP','SWE','CHE','TWN','THA','TUR','GBR','UKR','URY','VAT','VEN','VIR','VNM','ENG','SCT','WLS','NIR']);
 
     // Validation helper for location codes
     function validateCodes(codes, validSet, length) {
