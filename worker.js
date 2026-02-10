@@ -1274,23 +1274,8 @@ function generateMapHtml(data) {
     };
     info.addTo(map);
 
-    // Fetch helper with KV caching, timeout and retry logic
-    async function fetchGeoDataWithCache(env, cacheKey, url, retries = 3, timeout = 10000) {
-      // Try KV cache first (if available)
-      if (env.GEO_CACHE) {
-        try {
-          const cached = await env.GEO_CACHE.get(cacheKey, { type: 'json' });
-          if (cached) {
-            console.log(\`Cache HIT for \${cacheKey}\`);
-            return cached;
-          }
-          console.log(\`Cache MISS for \${cacheKey}\`);
-        } catch (err) {
-          console.warn('KV cache read failed:', err.message);
-          // Continue to fetch from source
-        }
-      }
-
+    // Fetch helper with timeout and retry logic (client-side)
+    async function fetchGeoData(url, retries = 3, timeout = 10000) {
       // Fetch from source with retry logic
       for (let i = 0; i < retries; i++) {
         try {
@@ -1304,18 +1289,6 @@ function generateMapHtml(data) {
             throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
           }
           const data = await response.json();
-
-          // Store in KV cache for future requests (24 hour TTL)
-          if (env.GEO_CACHE) {
-            try {
-              await env.GEO_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: 86400 });
-              console.log(\`Cached \${cacheKey} for 24 hours\`);
-            } catch (err) {
-              console.warn('KV cache write failed:', err.message);
-              // Non-fatal - continue with data
-            }
-          }
-
           return data;
         } catch (err) {
           const isLastRetry = i === retries - 1;
@@ -1333,9 +1306,7 @@ function generateMapHtml(data) {
 
     // Fetch countries (Natural Earth map_units - includes UK subdivisions like ENG, SCT, WLS, NIR, IRL)
     // Using 50m resolution for better island coverage (Florida Keys, Hawaii islands, Caribbean, etc.)
-    fetchGeoDataWithCache(
-      env,
-      'geo_countries_50m',
+    fetchGeoData(
       'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_map_units.geojson'
     )
       .then(data => {
@@ -1366,9 +1337,7 @@ function generateMapHtml(data) {
       });
 
     // Using Natural Earth 50m US states for better island coverage (includes Florida Keys, Aleutian Islands, etc.)
-    fetchGeoDataWithCache(
-      env,
-      'geo_states_provinces_50m',
+    fetchGeoData(
       'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
     )
       .then(data => {
@@ -1395,10 +1364,8 @@ function generateMapHtml(data) {
       });
 
     // Using Natural Earth 50m provinces for better island coverage (includes Canadian Arctic islands, etc.)
-    // Note: Uses same data source as US states above, so will benefit from shared cache
-    fetchGeoDataWithCache(
-      env,
-      'geo_states_provinces_50m',
+    // Note: Uses same data source as US states above
+    fetchGeoData(
       'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
     )
       .then(data => {
