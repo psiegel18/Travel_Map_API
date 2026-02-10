@@ -145,6 +145,7 @@ export default Sentry.withSentry(
     const workFutureStates = validateCodes(workFutureParam.split(','), VALID_STATES, 2);
     const personalFutureStates = validateCodes(personalFutureParam.split(','), VALID_STATES, 2);
     const workFutureProvinces = validateCodes(provFutureParam.split(','), VALID_PROVINCES, 2);
+    const persProvFuture = []; // Personal future provinces not yet supported as separate parameter
     const persCountriesFuture = validateCodes(persCountriesFutureParam.split(','), VALID_COUNTRIES, 3);
 
     // Combine valid sets for trip count validation (states + provinces for work/personal)
@@ -232,6 +233,48 @@ export default Sentry.withSentry(
       allFutureTripCounts
     );
 
+    // Calculate province breakdowns (similar to states)
+    const bothProvinces = workProvinces.filter(p => personalProvinces.includes(p));
+    const workOnlyProvinces = workProvinces.filter(p => !personalProvinces.includes(p));
+    const personalOnlyProvinces = personalProvinces.filter(p => !workProvinces.includes(p));
+
+    // Calculate breakdowns for all provinces
+    const allProvincesPastFuture = splitPastFuture(
+      allProvinces,
+      [...workFutureProvinces, ...persProvFuture],
+      totalTripCounts,
+      allFutureTripCounts
+    );
+    const pastProvinces = allProvincesPastFuture.past;
+    const futureOnlyProvinces = allProvincesPastFuture.futureOnly;
+
+    // Calculate breakdowns for work-only provinces
+    const workOnlyProvPastFuture = splitPastFuture(
+      workOnlyProvinces,
+      workFutureProvinces,
+      workTripCounts,
+      workTripsFuture
+    );
+
+    // Calculate breakdowns for personal-only provinces
+    const personalOnlyProvPastFuture = splitPastFuture(
+      personalOnlyProvinces,
+      persProvFuture,
+      persTripCounts,
+      persTripsFuture
+    );
+
+    // Calculate breakdowns for both provinces
+    const bothProvPastFuture = splitPastFuture(
+      bothProvinces,
+      [...workFutureProvinces, ...persProvFuture],
+      totalTripCounts,
+      allFutureTripCounts
+    );
+
+    // Calculate total country count (USA + Canada + international)
+    const totalCountries = (allStates.length > 0 ? 1 : 0) + (allProvinces.length > 0 ? 1 : 0) + allCountries.length;
+
     // Set Sentry tags for efficient issue filtering
     Sentry.setTag('map.has_data', hasData.toString());
     Sentry.setTag('map.states_count', allStates.length.toString());
@@ -267,7 +310,18 @@ export default Sentry.withSentry(
       personalOnlyPast: personalOnlyPastFuture.past,
       personalOnlyFuture: personalOnlyPastFuture.futureOnly,
       bothStatesPast: bothStatesPastFuture.past,
-      bothStatesFuture: bothStatesPastFuture.futureOnly
+      bothStatesFuture: bothStatesPastFuture.futureOnly,
+      // Province breakdowns
+      bothProvinces, workOnlyProvinces, personalOnlyProvinces,
+      pastProvinces, futureOnlyProvinces,
+      workOnlyProvPast: workOnlyProvPastFuture.past,
+      workOnlyProvFuture: workOnlyProvPastFuture.futureOnly,
+      personalOnlyProvPast: personalOnlyProvPastFuture.past,
+      personalOnlyProvFuture: personalOnlyProvPastFuture.futureOnly,
+      bothProvPast: bothProvPastFuture.past,
+      bothProvFuture: bothProvPastFuture.futureOnly,
+      // Total country count
+      totalCountries
     });
 
         return new Response(mapHtml, {
@@ -311,7 +365,15 @@ function generateMapHtml(data) {
     pastStates, futureOnlyStates,
     workOnlyPast, workOnlyFuture,
     personalOnlyPast, personalOnlyFuture,
-    bothStatesPast, bothStatesFuture
+    bothStatesPast, bothStatesFuture,
+    // Province breakdowns
+    bothProvinces, workOnlyProvinces, personalOnlyProvinces,
+    pastProvinces, futureOnlyProvinces,
+    workOnlyProvPast, workOnlyProvFuture,
+    personalOnlyProvPast, personalOnlyProvFuture,
+    bothProvPast, bothProvFuture,
+    // Total country count
+    totalCountries
   } = data;
 
   const stateNames = {
@@ -789,8 +851,29 @@ function generateMapHtml(data) {
         ${bothStatesFuture.length > 0 ?
           `<span class="stat-breakdown">(+${bothStatesFuture.length} future)</span>`
           : ''}
-        ${allProvinces.length > 0 ? `<div class="stat-divider"></div><span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>` : ''}
-        ${allCountries.length > 0 ? `<div class="stat-divider"></div><span class="stat-country">${allCountries.length} ${allCountries.length > 1 ? 'countries' : 'country'}</span>` : ''}
+        ${allProvinces.length > 0 ? `
+          <div class="stat-divider"></div>
+          <span class="stat-prov">${allProvinces.length} province${allProvinces.length > 1 ? 's' : ''}</span>
+          ${futureOnlyProvinces.length > 0 ?
+            `<span class="stat-breakdown">(${pastProvinces.length} past, ${futureOnlyProvinces.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-work">${workOnlyProvPast.length} work</span>
+          ${workOnlyProvFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${workOnlyProvFuture.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-personal">${personalOnlyProvPast.length} personal</span>
+          ${personalOnlyProvFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${personalOnlyProvFuture.length} future)</span>`
+            : ''}
+          <div class="stat-divider"></div>
+          <span class="stat-both">${bothProvPast.length} both</span>
+          ${bothProvFuture.length > 0 ?
+            `<span class="stat-breakdown">(+${bothProvFuture.length} future)</span>`
+            : ''}
+        ` : ''}
+        ${totalCountries > 0 ? `<div class="stat-divider"></div><span class="stat-country">${totalCountries} ${totalCountries > 1 ? 'countries' : 'country'}</span>` : ''}
       </div>
     </div>
   </div>
