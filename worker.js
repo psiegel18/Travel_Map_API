@@ -946,10 +946,11 @@ function generateMapHtml(data) {
 
     document.getElementById('print-btn').addEventListener('click', function() {
       if (window !== window.top) {
-        // In iframe: open map in its own tab so user can print safely.
-        // Do NOT auto-call print() on the new window - loading two heavy
-        // Leaflet maps simultaneously and triggering print crashes Edge/Chromium.
-        var newTab = window.open(window.location.href, '_blank');
+        // In iframe: open in a new tab with &print=1 so it auto-prints once loaded.
+        // Don't call print() from here - two heavy Leaflet maps crashes Edge/Chromium.
+        var printUrl = new URL(window.location.href);
+        printUrl.searchParams.set('print', '1');
+        var newTab = window.open(printUrl.toString(), '_blank');
         if (!newTab) {
           alert('Pop-up blocked. Please allow pop-ups for this site, or open the map URL directly to print.');
         }
@@ -1709,6 +1710,29 @@ function generateMapHtml(data) {
         console.error('Error loading states/provinces:', err);
         showError('Unable to load US states and Canadian provinces map data. Please refresh the page to try again.');
       });
+
+    // Auto-print when opened via &print=1 (from iframe print button).
+    // Wait for map tiles and GeoJSON to load before triggering print dialog.
+    if (new URLSearchParams(window.location.search).get('print') === '1') {
+      // Strip print param from URL so bookmarks/refreshes don't re-trigger
+      var cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('print');
+      history.replaceState(null, '', cleanUrl.toString());
+
+      var printCheckInterval = setInterval(function() {
+        // Wait until at least the states layer has loaded
+        if (mapLayers.states) {
+          clearInterval(printCheckInterval);
+          // Small extra delay for tile rendering
+          setTimeout(function() { window.print(); }, 500);
+        }
+      }, 200);
+      // Safety timeout - print anyway after 8 seconds even if data is slow
+      setTimeout(function() {
+        clearInterval(printCheckInterval);
+        window.print();
+      }, 8000);
+    }
   </script>
 </body>
 </html>`;
