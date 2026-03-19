@@ -1719,19 +1719,26 @@ function generateMapHtml(data) {
       cleanUrl.searchParams.delete('print');
       history.replaceState(null, '', cleanUrl.toString());
 
+      var printFired = false;
+      function doPrint() {
+        if (printFired) return;
+        printFired = true;
+        window.print();
+      }
+
+      // Wait for GeoJSON layers, then wait for all map tiles to finish loading
       var printCheckInterval = setInterval(function() {
-        // Wait until at least the states layer has loaded
         if (mapLayers.states) {
           clearInterval(printCheckInterval);
-          // Small extra delay for tile rendering
-          setTimeout(function() { window.print(); }, 500);
+          // Listen for Leaflet's 'load' event (fires when all visible tiles are done)
+          map.whenReady(function() {
+            // Extra buffer for tile images to fully decode and render
+            setTimeout(doPrint, 1500);
+          });
         }
       }, 200);
-      // Safety timeout - print anyway after 8 seconds even if data is slow
-      setTimeout(function() {
-        clearInterval(printCheckInterval);
-        window.print();
-      }, 8000);
+      // Safety timeout - print anyway after 10 seconds even if data is slow
+      setTimeout(doPrint, 10000);
     }
   </script>
 </body>
