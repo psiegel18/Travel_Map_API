@@ -153,7 +153,6 @@ GET /debug-sentry?key=your-admin-password
 ```
 Travel_Map_API/
 ├── worker.js          # Main Cloudflare Worker entry point
-├── wiki-embed.js      # Helper for MediaWiki embedding
 ├── wrangler.toml      # Cloudflare Worker configuration
 ├── package.json       # Node.js dependencies
 └── README.md          # This file

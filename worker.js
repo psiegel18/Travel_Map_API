@@ -586,6 +586,8 @@ function generateMapHtml(data) {
     .info-box .trip-work { color: #ff9800; }
     .info-box .trip-personal { color: #e91e63; }
     .info-box .trip-future { font-style: italic; opacity: 0.9; }
+    .leaflet-interactive { transition: fill-opacity 0.3s ease, stroke-opacity 0.3s ease; }
+    .legend-item.dimmed { opacity: 0.25; transition: opacity 0.3s ease; }
     .leaflet-container { background: #b8d4e8; font-family: inherit; }
     .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.8) !important; }
     .region-label {
@@ -812,55 +814,7 @@ function generateMapHtml(data) {
     </button>
     <div id="stats-dashboard" class="stats-dashboard collapsed">
       <h3 style="margin: 0 0 12px 0; color: #2d3436; font-size: 16px;">📊 Travel Statistics</h3>
-      <div class="dashboard-grid">
-        <div class="dashboard-card">
-          <h4>Total Locations</h4>
-          <div class="value">${allStates.length + allProvinces.length + allCountries.length}</div>
-          <div class="label">${allStates.length} states, ${allProvinces.length} provinces, ${allCountries.length} countries</div>
-        </div>
-        <div class="dashboard-card">
-          <h4>Total Trips</h4>
-          <div class="value">${Object.values(totalTripCounts).reduce((a, b) => a + b, 0)}</div>
-          <div class="label">${Object.values(workTripCounts).reduce((a, b) => a + b, 0)} work + ${Object.values(persTripCounts).reduce((a, b) => a + b, 0)} personal</div>
-        </div>
-        <div class="dashboard-card">
-          <h4>US Coverage</h4>
-          <div class="value">${pct}%</div>
-          <div class="label">${allStates.length} of 50 states</div>
-        </div>
-        <div class="dashboard-card">
-          <h4>Most Visited</h4>
-          <div class="value">${(() => {
-            const sorted = Object.entries(totalTripCounts).sort((a, b) => b[1] - a[1]);
-            return sorted.length > 0 ? sorted[0][0] : 'N/A';
-          })()}</div>
-          <div class="label">${(() => {
-            const sorted = Object.entries(totalTripCounts).sort((a, b) => b[1] - a[1]);
-            return sorted.length > 0 ? sorted[0][1] + ' trips' : '';
-          })()}</div>
-        </div>
-      </div>
-      <div class="dashboard-grid" style="margin-top: 12px;">
-        <div class="dashboard-card">
-          <h4>Top 5 Destinations</h4>
-          <ul class="dashboard-list">
-            ${Object.entries(totalTripCounts)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 5)
-              .map(([code, count]) => `<li><span class="list-label">${code}</span><span class="list-value">${count} trips</span></li>`)
-              .join('')}
-          </ul>
-        </div>
-        <div class="dashboard-card">
-          <h4>Trip Breakdown</h4>
-          <ul class="dashboard-list">
-            <li><span class="list-label">Work Only</span><span class="list-value">${workOnlyPast.length + workOnlyFuture.length} locations</span></li>
-            <li><span class="list-label">Personal Only</span><span class="list-value">${personalOnlyPast.length + personalOnlyFuture.length} locations</span></li>
-            <li><span class="list-label">Both</span><span class="list-value">${bothStatesPast.length + bothStatesFuture.length} locations</span></li>
-            ${futureOnlyStates.length > 0 ? `<li><span class="list-label">Future Only</span><span class="list-value">${futureOnlyStates.length} locations</span></li>` : ''}
-          </ul>
-        </div>
-      </div>
+      <div id="dashboard-content"></div>
     </div>
     <div id="error-banner" class="error-banner">
       <h4>Map Loading Error</h4>
@@ -873,47 +827,17 @@ function generateMapHtml(data) {
       <button class="filter-btn" data-view="past">Past Only</button>
       <button class="filter-btn" data-view="future">Future Only</button>
     </div>
-    <div class="legend">
-      <div class="legend-item"><span class="legend-swatch swatch-work"></span> Work</div>
-      <div class="legend-item"><span class="legend-swatch swatch-personal"></span> Personal</div>
-      <div class="legend-item"><span class="legend-swatch swatch-both"></span> Both</div>
-      <div class="legend-item"><span class="legend-swatch swatch-upcoming"></span> + Upcoming</div>
-      <div class="legend-item"><span class="legend-swatch swatch-future"></span> Future Only</div>
-      <div class="legend-item"><span style="font-weight: 600; font-size: 14px;">*</span> = has upcoming</div>
+    <div class="legend" id="legend">
+      <div class="legend-item" data-views="all work past"><span class="legend-swatch swatch-work"></span> Work</div>
+      <div class="legend-item" data-views="all personal past"><span class="legend-swatch swatch-personal"></span> Personal</div>
+      <div class="legend-item" data-views="all past"><span class="legend-swatch swatch-both"></span> Both</div>
+      <div class="legend-item" data-views="all work personal past future"><span class="legend-swatch swatch-upcoming"></span> + Upcoming</div>
+      <div class="legend-item" data-views="all future"><span class="legend-swatch swatch-future"></span> Future Only</div>
+      <div class="legend-item" data-views="all work personal past future"><span style="font-weight: 600; font-size: 14px;">*</span> = has upcoming</div>
     </div>
     <div class="map-container">
       <div id="map"></div>
-      <div class="stats">
-        <div class="stat-item">
-          <span class="stat-number">${allStates.length}</span>
-          <span class="stat-label">/ 50 states (${pct}%)</span>
-          ${futureOnlyStates.length > 0 ?
-            `<span class="stat-breakdown">(${pastStates.length} past, ${futureOnlyStates.length} future)</span>`
-            : ''}
-        </div>
-        ${allProvinces.length > 0 ? `
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-number">${allProvinces.length}</span>
-            <span class="stat-label">province${allProvinces.length > 1 ? 's' : ''}</span>
-            ${futureOnlyProvinces.length > 0 ?
-              `<span class="stat-breakdown">(${pastProvinces.length} past, ${futureOnlyProvinces.length} future)</span>`
-              : ''}
-          </div>
-        ` : ''}
-        ${allCountries.length > 0 ? `
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-number">${allCountries.length}</span>
-            <span class="stat-label">${allCountries.length > 1 ? 'countries' : 'country'}</span>
-            ${futureOnlyCountries.length > 0 ?
-              `<span class="stat-breakdown">(${pastCountries.length} past, ${futureOnlyCountries.length} future)</span>`
-              : ''}
-          </div>
-        ` : ''}
-        <div class="stat-divider"></div>
-        <span class="stat-total">${totalTripCounts && Object.values(totalTripCounts).length > 0 ? Object.values(totalTripCounts).reduce((a, b) => a + b, 0) : 0} total trips</span>
-      </div>
+      <div class="stats" id="stats-bar"></div>
     </div>
   </div>
 
@@ -1021,7 +945,17 @@ function generateMapHtml(data) {
     }
 
     document.getElementById('print-btn').addEventListener('click', function() {
-      window.print();
+      if (window !== window.top) {
+        // In iframe: open map in its own tab so user can print safely.
+        // Do NOT auto-call print() on the new window - loading two heavy
+        // Leaflet maps simultaneously and triggering print crashes Edge/Chromium.
+        var newTab = window.open(window.location.href, '_blank');
+        if (!newTab) {
+          alert('Pop-up blocked. Please allow pop-ups for this site, or open the map URL directly to print.');
+        }
+      } else {
+        window.print();
+      }
     });
 
     document.getElementById('stats-btn').addEventListener('click', function() {
@@ -1053,98 +987,221 @@ function generateMapHtml(data) {
     let currentView = 'all';
     let mapLayers = { states: null, provinces: null, countries: null };
 
+    // Read initial view from URL if present
+    const urlView = new URLSearchParams(window.location.search).get('view');
+    if (urlView && ['all','work','personal','past','future'].includes(urlView)) {
+      currentView = urlView;
+      document.querySelectorAll('.filter-btn').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-view') === currentView);
+      });
+    }
+
     document.querySelectorAll('.filter-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        // Update active button
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
 
         currentView = this.getAttribute('data-view');
-        applyViewFilter(currentView);
+        applyViewFilter(currentView); // also calls updateStats + updateLegendForView
+
+        // Update URL without page reload so Copy URL captures the view
+        const url = new URL(window.location.href);
+        if (currentView === 'all') {
+          url.searchParams.delete('view');
+        } else {
+          url.searchParams.set('view', currentView);
+        }
+        history.replaceState(null, '', url.toString());
       });
     });
+
+    // Dim legend items that are irrelevant to the current view
+    function updateLegendForView(view) {
+      document.querySelectorAll('#legend .legend-item').forEach(function(item) {
+        const views = (item.getAttribute('data-views') || 'all').split(' ');
+        if (view === 'all' || views.includes(view)) {
+          item.classList.remove('dimmed');
+        } else {
+          item.classList.add('dimmed');
+        }
+      });
+    }
+
+    // Resolve a location code to its full name
+    function lookupName(code) {
+      return stateNames[code] || provNames[code] || countryNames[code] || code;
+    }
+
+    // Determine location type from code
+    function codeType(code) {
+      if (stateNames[code]) return 'state';
+      if (provNames[code]) return 'province';
+      if (countryNames[code]) return 'country';
+      // Fallback: check arrays
+      if (workStates.includes(code) || personalStates.includes(code)) return 'state';
+      if (workProvinces.includes(code) || personalProvinces.includes(code)) return 'province';
+      if (workCountries.includes(code) || personalCountries.includes(code)) return 'country';
+      return 'state';
+    }
+
+    // Compute and render stats for the given view filter
+    function updateStats(view) {
+      // Collect all unique location codes
+      const allCodes = new Set([
+        ...workStates, ...personalStates,
+        ...workProvinces, ...personalProvinces,
+        ...workCountries, ...personalCountries,
+        ...workFutureStates, ...personalFutureStates,
+        ...workFutureProvinces, ...persCountriesFuture,
+        ...Object.keys(workTripCounts), ...Object.keys(persTripCounts)
+      ]);
+
+      let visStates = 0, visProvs = 0, visCountries = 0;
+      let visWorkTrips = 0, visPersTrips = 0;
+      let workOnlyCount = 0, persOnlyCount = 0, bothCount = 0, futureOnlyCount = 0;
+      const tripsByCode = {}; // code -> total visible trips
+
+      allCodes.forEach(function(code) {
+        const type = codeType(code);
+        if (!shouldShowLocation(code, type, view)) return;
+
+        const cat = getCategory(code, type);
+        if (cat === 'unvisited') return;
+
+        // Count location types
+        if (type === 'state') visStates++;
+        else if (type === 'province') visProvs++;
+        else visCountries++;
+
+        // Count trips relevant to this view
+        const info = getTripInfo(code);
+        let wTrips = 0, pTrips = 0;
+        if (view === 'all' || view === 'work' || view === 'past') wTrips = info.workPast;
+        if (view === 'all' || view === 'personal' || view === 'past') pTrips = info.persPast;
+        if (view === 'future') { wTrips = info.workFuture; pTrips = info.persFuture; }
+        if (view === 'all') { wTrips = info.workTotal; pTrips = info.persTotal; }
+
+        visWorkTrips += wTrips;
+        visPersTrips += pTrips;
+        const total = wTrips + pTrips;
+        if (total > 0) tripsByCode[code] = total;
+
+        // Breakdown
+        if (cat === 'futureOnly') futureOnlyCount++;
+        else if (cat === 'both') bothCount++;
+        else if (cat === 'work') workOnlyCount++;
+        else if (cat === 'personal') persOnlyCount++;
+      });
+
+      const totalLocs = visStates + visProvs + visCountries;
+      const totalTrips = visWorkTrips + visPersTrips;
+      const pctVal = visStates > 0 ? Math.round(visStates / 50 * 100) : 0;
+
+      // Sort destinations by trip count
+      const sorted = Object.entries(tripsByCode).sort(function(a, b) { return b[1] - a[1]; });
+
+      // --- Render stats bar ---
+      let barHtml = '<div class="stat-item"><span class="stat-number">' + visStates + '</span><span class="stat-label">/ 50 states (' + pctVal + '%)</span></div>';
+      if (visProvs > 0) {
+        barHtml += '<div class="stat-divider"></div><div class="stat-item"><span class="stat-number">' + visProvs + '</span><span class="stat-label">province' + (visProvs > 1 ? 's' : '') + '</span></div>';
+      }
+      if (visCountries > 0) {
+        barHtml += '<div class="stat-divider"></div><div class="stat-item"><span class="stat-number">' + visCountries + '</span><span class="stat-label">' + (visCountries > 1 ? 'countries' : 'country') + '</span></div>';
+      }
+      barHtml += '<div class="stat-divider"></div><span class="stat-total">' + totalTrips + ' total trips</span>';
+      if (currentView !== 'all') {
+        barHtml += '<span class="stat-breakdown">(filtered: ' + currentView + ')</span>';
+      }
+      document.getElementById('stats-bar').innerHTML = barHtml;
+
+      // --- Render dashboard ---
+      const mostVisited = sorted.length > 0 ? sorted[0] : null;
+      let dashHtml = '<div class="dashboard-grid">';
+      dashHtml += '<div class="dashboard-card"><h4>Total Locations</h4><div class="value">' + totalLocs + '</div><div class="label">' + visStates + ' states, ' + visProvs + ' provinces, ' + visCountries + ' countries</div></div>';
+      dashHtml += '<div class="dashboard-card"><h4>Total Trips</h4><div class="value">' + totalTrips + '</div><div class="label">' + visWorkTrips + ' work + ' + visPersTrips + ' personal</div></div>';
+      dashHtml += '<div class="dashboard-card"><h4>US Coverage</h4><div class="value">' + pctVal + '%</div><div class="label">' + visStates + ' of 50 states</div></div>';
+      dashHtml += '<div class="dashboard-card"><h4>Most Visited</h4><div class="value">' + (mostVisited ? lookupName(mostVisited[0]) : 'N/A') + '</div><div class="label">' + (mostVisited ? mostVisited[1] + ' trips' : '') + '</div></div>';
+      dashHtml += '</div>';
+
+      dashHtml += '<div class="dashboard-grid" style="margin-top: 12px;">';
+      dashHtml += '<div class="dashboard-card"><h4>Top 5 Destinations</h4><ul class="dashboard-list">';
+      sorted.slice(0, 5).forEach(function(entry) {
+        dashHtml += '<li><span class="list-label">' + lookupName(entry[0]) + '</span><span class="list-value">' + entry[1] + ' trips</span></li>';
+      });
+      dashHtml += '</ul></div>';
+
+      dashHtml += '<div class="dashboard-card"><h4>Trip Breakdown</h4><ul class="dashboard-list">';
+      dashHtml += '<li><span class="list-label">Work Only</span><span class="list-value">' + workOnlyCount + ' locations</span></li>';
+      dashHtml += '<li><span class="list-label">Personal Only</span><span class="list-value">' + persOnlyCount + ' locations</span></li>';
+      dashHtml += '<li><span class="list-label">Both</span><span class="list-value">' + bothCount + ' locations</span></li>';
+      if (futureOnlyCount > 0) {
+        dashHtml += '<li><span class="list-label">Future Only</span><span class="list-value">' + futureOnlyCount + ' locations</span></li>';
+      }
+      dashHtml += '</ul></div></div>';
+
+      document.getElementById('dashboard-content').innerHTML = dashHtml;
+    }
 
     function applyViewFilter(view) {
       console.log('Applying view filter:', view);
 
+      // Update stats and legend to match (idempotent, safe to call repeatedly)
+      updateStats(view);
+      updateLegendForView(view);
+
       // Iterate through all layer features and update their style
+      // Helper to apply filter to a single layer
+      function applyFilterToLayer(layer, locationType) {
+        const code = layer.locationCode;
+        const visible = shouldShowLocation(code, locationType, view);
+
+        // Recompute original style from the style function (not from live layer
+        // options) to avoid capturing a stale hover style if user clicks a
+        // filter button while hovering a region.
+        if (locationType === 'country') {
+          const cat = getCategory(code, 'country');
+          layer._originalStyle = cat === 'unvisited'
+            ? { fillColor: '#dfe6e9', fillOpacity: 0.3, weight: 0.5, opacity: 0.3, color: '#ccc' }
+            : styleFeature(code, 'country');
+        } else {
+          layer._originalStyle = styleFeature(code, locationType);
+        }
+
+        layer._filteredVisible = visible;
+        if (visible) {
+          layer.setStyle(layer._originalStyle);
+          if (layer.setInteractive) layer.setInteractive(true);
+        } else {
+          layer.setStyle({ fillOpacity: 0, opacity: 0 });
+          if (layer.setInteractive) layer.setInteractive(false);
+        }
+      }
+
       if (mapLayers.states) {
-        mapLayers.states.eachLayer(function(layer) {
-          const code = layer.locationCode;
-          const visible = shouldShowLocation(code, 'state', view);
-
-          // Store original style if not already stored
-          if (!layer._originalStyle) {
-            layer._originalStyle = {
-              fillOpacity: layer.options.fillOpacity,
-              opacity: layer.options.opacity,
-              weight: layer.options.weight,
-              color: layer.options.color,
-              dashArray: layer.options.dashArray
-            };
-          }
-
-          if (visible) {
-            // Restore original style
-            layer.setStyle(layer._originalStyle);
-          } else {
-            // Hide the layer
-            layer.setStyle({ fillOpacity: 0, opacity: 0 });
-          }
-        });
+        mapLayers.states.eachLayer(function(layer) { applyFilterToLayer(layer, 'state'); });
       }
-
       if (mapLayers.provinces) {
-        mapLayers.provinces.eachLayer(function(layer) {
-          const code = layer.locationCode;
-          const visible = shouldShowLocation(code, 'province', view);
-
-          // Store original style if not already stored
-          if (!layer._originalStyle) {
-            layer._originalStyle = {
-              fillOpacity: layer.options.fillOpacity,
-              opacity: layer.options.opacity,
-              weight: layer.options.weight,
-              color: layer.options.color,
-              dashArray: layer.options.dashArray
-            };
-          }
-
-          if (visible) {
-            // Restore original style
-            layer.setStyle(layer._originalStyle);
-          } else {
-            // Hide the layer
-            layer.setStyle({ fillOpacity: 0, opacity: 0 });
-          }
-        });
+        mapLayers.provinces.eachLayer(function(layer) { applyFilterToLayer(layer, 'province'); });
       }
-
       if (mapLayers.countries) {
-        mapLayers.countries.eachLayer(function(layer) {
-          const code = layer.locationCode;
-          const visible = shouldShowLocation(code, 'country', view);
-
-          // Store original style if not already stored
-          if (!layer._originalStyle) {
-            layer._originalStyle = {
-              fillOpacity: layer.options.fillOpacity,
-              opacity: layer.options.opacity,
-              weight: layer.options.weight,
-              color: layer.options.color,
-              dashArray: layer.options.dashArray
-            };
-          }
-
-          if (visible) {
-            // Restore original style
-            layer.setStyle(layer._originalStyle);
-          } else {
-            // Hide the layer
-            layer.setStyle({ fillOpacity: 0, opacity: 0 });
-          }
-        });
+        mapLayers.countries.eachLayer(function(layer) { applyFilterToLayer(layer, 'country'); });
       }
+
+      // Hide/show region labels based on filter
+      // Use addTo/removeLayer instead of DOM manipulation because
+      // getElement() returns null for off-screen Leaflet DivIcon markers
+      regionLabels.forEach(function(item) {
+        const visible = shouldShowLocation(item.locationCode, item.locationType, view);
+        if (visible) {
+          if (!map.hasLayer(item.marker)) {
+            item.marker.addTo(map);
+          }
+        } else {
+          if (map.hasLayer(item.marker)) {
+            map.removeLayer(item.marker);
+          }
+        }
+      });
     }
 
     function shouldShowLocation(code, locationType, view) {
@@ -1156,7 +1213,7 @@ function generateMapHtml(data) {
       if (view === 'all') return true;
       if (view === 'work') return hasPastWork || (workStates.includes(code) || workProvinces.includes(code) || workCountries.includes(code));
       if (view === 'personal') return hasPastPersonal || (personalStates.includes(code) || personalProvinces.includes(code) || personalCountries.includes(code));
-      if (view === 'past') return (hasPastWork || hasPastPersonal) && !hasFuture;
+      if (view === 'past') return hasPastWork || hasPastPersonal;
       if (view === 'future') return hasFuture;
       return true;
     }
@@ -1226,7 +1283,7 @@ function generateMapHtml(data) {
       subdomains: 'abcd', maxZoom: 20, pane: 'labels'
     }).addTo(map);
 
-    const regionLabels = [];
+    const regionLabels = []; // { marker, locationType, locationCode }
 
     function getZoomClass(zoom, locationType) {
       const isCountry = locationType === 'country';
@@ -1242,6 +1299,7 @@ function generateMapHtml(data) {
     function updateLabelsForZoom() {
       const zoom = map.getZoom();
       regionLabels.forEach(item => {
+        if (!map.hasLayer(item.marker)) return;
         const el = item.marker.getElement();
         if (!el) return;
         el.classList.remove('region-label-zoom-2', 'region-label-zoom-3', 'region-label-zoom-4',
@@ -1284,7 +1342,7 @@ function generateMapHtml(data) {
         interactive: false
       }).addTo(map);
 
-      regionLabels.push({ marker, locationType });
+      regionLabels.push({ marker, locationType, locationCode: code });
     }
 
     function getProvinceCode(props) {
@@ -1451,12 +1509,22 @@ function generateMapHtml(data) {
       const code = e.target.locationCode;
       const type = e.target.locationType;
       if (type === 'country' && (code === 'USA' || code === 'CAN')) return;
+      // Don't highlight layers hidden by filter
+      if (e.target._filteredVisible === false) return;
       e.target.setStyle({ weight: 3, color: '#333', fillOpacity: 0.9 });
       e.target.bringToFront();
       info.update(e.target.feature, e.target.locationType);
     }
 
-    function resetHighlight(e, layer) { layer.resetStyle(e.target); info.update(); }
+    function resetHighlight(e, layer) {
+      // If layer is hidden by filter, restore hidden style instead of original
+      if (e.target._filteredVisible === false) {
+        e.target.setStyle({ fillOpacity: 0, opacity: 0 });
+      } else {
+        layer.resetStyle(e.target);
+      }
+      info.update();
+    }
 
     const info = L.control({ position: 'topright' });
     info.onAdd = function() {
@@ -1563,6 +1631,10 @@ function generateMapHtml(data) {
       }
     }
 
+    // Initial render of stats and legend for the active view
+    updateStats(currentView);
+    updateLegendForView(currentView);
+
     // Fetch countries (Natural Earth map_units - includes UK subdivisions like ENG, SCT, WLS, NIR, IRL)
     // Using 50m resolution for better island coverage (Florida Keys, Hawaii islands, Caribbean, etc.)
     fetchGeoData(
@@ -1589,64 +1661,53 @@ function generateMapHtml(data) {
           }
         }).addTo(map);
         mapLayers.countries = layer;
+        if (currentView !== 'all') applyViewFilter(currentView);
       })
       .catch(err => {
         console.error('Error loading countries:', err);
         showError('Unable to load country map data. Please refresh the page to try again.');
       });
 
-    // Using Natural Earth 50m US states for better island coverage (includes Florida Keys, Aleutian Islands, etc.)
+    // Fetch states + provinces from single GeoJSON (same ~3MB file, fetched once)
     fetchGeoData(
       'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
     )
       .then(data => {
-        // Filter for only US states (iso_a2 === 'US')
-        data.features = data.features.filter(f => f.properties.iso_a2 === 'US');
-
-        const layer = L.geoJson(data, {
+        // US states
+        const usFeatures = { type: 'FeatureCollection', features: data.features.filter(f => f.properties.iso_a2 === 'US') };
+        const statesLayer = L.geoJson(usFeatures, {
           style: styleState,
           pane: 'states',
           onEachFeature: (f, l) => {
-            // Natural Earth uses 'postal' property for 2-letter state codes
             const code = f.properties.postal || f.properties.code_hasc?.split('-')[1] || '';
             l.locationType = 'state';
             l.locationCode = code;
-            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, statesLayer), click: e => map.fitBounds(e.target.getBounds()) });
             addRegionLabel(l, code, 'state');
           }
         }).addTo(map);
-        mapLayers.states = layer;
-      })
-      .catch(err => {
-        console.error('Error loading US states:', err);
-        showError('Unable to load US states map data. Please refresh the page to try again.');
-      });
+        mapLayers.states = statesLayer;
 
-    // Using Natural Earth 50m provinces for better island coverage (includes Canadian Arctic islands, etc.)
-    // Note: Uses same data source as US states above
-    fetchGeoData(
-      'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
-    )
-      .then(data => {
-        // Filter for only Canadian provinces (iso_a2 === 'CA')
-        data.features = data.features.filter(f => f.properties.iso_a2 === 'CA');
-
-        const layer = L.geoJson(data, {
+        // Canadian provinces
+        const caFeatures = { type: 'FeatureCollection', features: data.features.filter(f => f.properties.iso_a2 === 'CA') };
+        const provLayer = L.geoJson(caFeatures, {
           style: styleProvince,
           pane: 'provinces',
           onEachFeature: (f, l) => {
             const code = getProvinceCode(f.properties);
             l.locationType = 'province';
             l.locationCode = code;
-            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, layer), click: e => map.fitBounds(e.target.getBounds()) });
+            l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, provLayer), click: e => map.fitBounds(e.target.getBounds()) });
             addRegionLabel(l, code, 'province');
           }
         }).addTo(map);
-        mapLayers.provinces = layer;
+        mapLayers.provinces = provLayer;
+
+        if (currentView !== 'all') applyViewFilter(currentView);
       })
       .catch(err => {
-        console.error('Error loading Canadian provinces:', err);
-        showError('Unable to load Canadian provinces map data. Please refresh the page to try again.');
+        console.error('Error loading states/provinces:', err);
+        showError('Unable to load US states and Canadian provinces map data. Please refresh the page to try again.');
       });
   </script>
 </body>
