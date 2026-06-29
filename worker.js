@@ -809,9 +809,6 @@ function generateMapHtml(data) {
         📊 Statistics
       </button>
     </div>
-    <button class="stats-toggle-btn" id="stats-toggle" style="display:none;">
-      ▼ Show Statistics Dashboard
-    </button>
     <div id="stats-dashboard" class="stats-dashboard collapsed">
       <h3 style="margin: 0 0 12px 0; color: #2d3436; font-size: 16px;">📊 Travel Statistics</h3>
       <div id="dashboard-content"></div>
@@ -961,27 +958,11 @@ function generateMapHtml(data) {
 
     document.getElementById('stats-btn').addEventListener('click', function() {
       const dashboard = document.getElementById('stats-dashboard');
-      const toggle = document.getElementById('stats-toggle');
-      if (toggle.style.display === 'none') {
-        toggle.style.display = 'block';
-        toggle.click(); // Auto-expand on first click
-      } else {
-        toggle.click();
-      }
-    });
-
-    document.getElementById('stats-toggle').addEventListener('click', function() {
-      const dashboard = document.getElementById('stats-dashboard');
       const btn = this;
-      if (dashboard.classList.contains('expanded')) {
-        dashboard.classList.remove('expanded');
-        dashboard.classList.add('collapsed');
-        btn.textContent = '▼ Show Statistics Dashboard';
-      } else {
-        dashboard.classList.remove('collapsed');
-        dashboard.classList.add('expanded');
-        btn.textContent = '▲ Hide Statistics Dashboard';
-      }
+      const expanding = dashboard.classList.contains('collapsed');
+      dashboard.classList.toggle('collapsed', !expanding);
+      dashboard.classList.toggle('expanded', expanding);
+      btn.textContent = expanding ? '📊 Hide Statistics' : '📊 Statistics';
     });
 
     // View filter functionality - will be connected after map layers are created
