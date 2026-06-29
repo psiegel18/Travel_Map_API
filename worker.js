@@ -1256,13 +1256,30 @@ function generateMapHtml(data) {
       "54":"WV","55":"WI","56":"WY"
     };
 
-    const map = L.map('map', { center: [44, -98], zoom: 4, minZoom: 2, maxZoom: 10 });
+    const map = L.map('map', {
+      center: [44, -98], zoom: 4,
+      minZoom: 3, maxZoom: 10,
+      worldCopyJump: false,
+      maxBounds: [[-58, -172], [80, 12]],   // Americas + W. Europe; blocks gray void & world repeat
+      maxBoundsViscosity: 0.9
+    });
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OSM &copy; CARTO',
       subdomains: 'abcd',
-      maxZoom: 20
+      maxZoom: 20,
+      noWrap: true
     }).addTo(map);
+
+    var visitedBounds = L.latLngBounds([]);
+    var didFit = false;
+    function fitToVisited() {
+      if (didFit) return;
+      if (visitedBounds.isValid()) {
+        map.fitBounds(visitedBounds, { padding: [30, 30], maxZoom: 6 });
+        didFit = true;
+      }
+    }
 
     const countriesPane = map.createPane('countries');
     countriesPane.style.zIndex = 400;
@@ -1281,7 +1298,7 @@ function generateMapHtml(data) {
     labelsPane.style.zIndex = 650;
     labelsPane.style.pointerEvents = 'none';
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd', maxZoom: 20, pane: 'labels'
+      subdomains: 'abcd', maxZoom: 20, pane: 'labels', noWrap: true
     }).addTo(map);
 
     const regionLabels = []; // { marker, locationType, locationCode }
@@ -1685,6 +1702,9 @@ function generateMapHtml(data) {
             l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, statesLayer), click: e => map.fitBounds(e.target.getBounds()) });
             addRegionLabel(l, code, 'state');
+            if (getCategory(code, l.locationType) !== 'unvisited') {
+              visitedBounds.extend(l.getBounds());
+            }
           }
         }).addTo(map);
         mapLayers.states = statesLayer;
@@ -1700,9 +1720,13 @@ function generateMapHtml(data) {
             l.locationCode = code;
             l.on({ mouseover: highlightFeature, mouseout: e => resetHighlight(e, provLayer), click: e => map.fitBounds(e.target.getBounds()) });
             addRegionLabel(l, code, 'province');
+            if (getCategory(code, l.locationType) !== 'unvisited') {
+              visitedBounds.extend(l.getBounds());
+            }
           }
         }).addTo(map);
         mapLayers.provinces = provLayer;
+        fitToVisited();
 
         if (currentView !== 'all') applyViewFilter(currentView);
       })
