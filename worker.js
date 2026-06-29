@@ -1347,8 +1347,10 @@ function generateMapHtml(data) {
 
     function addRegionLabel(layer, code, locationType) {
       const info = getTripInfo(code);
-      const pastCount = info.workPast + info.persPast;
-      const futureCount = info.workFuture + info.persFuture;
+      // Combine-aware so a linked work+personal pair shows as 1 visit on the
+      // region badge, matching the popup "N visit(s)" headline.
+      const pastCount = Math.max(0, info.workPast + info.persPast - info.combinePast);
+      const futureCount = Math.max(0, info.workFuture + info.persFuture - info.combineFuture);
 
       // Only show labels for regions with past trips (future-only regions have no label)
       if (pastCount === 0) return;
