@@ -81,7 +81,11 @@ export default Sentry.withSentry(
     const persCountriesParam = url.searchParams.get('persCountries') || '';
     const workTripsParam = url.searchParams.get('workTrips') || '';
     const persTripsParam = url.searchParams.get('persTrips') || '';
-    
+
+    // Combine-aware canonical trip totals (Task 4 contract)
+    const tripsPastParam = parseInt(url.searchParams.get('tripsPast'), 10);
+    const tripsUpcomingParam = parseInt(url.searchParams.get('tripsUpcoming'), 10);
+
     // Future trip parameters
     const workFutureParam = url.searchParams.get('workFuture') || '';
     const personalFutureParam = url.searchParams.get('personalFuture') || '';
@@ -156,6 +160,10 @@ export default Sentry.withSentry(
     const persTripCounts = parseTripCounts(persTripsParam, VALID_STATE_PROV_COUNTRY);
     const workTripsFuture = parseTripCounts(workTripsFutureParam, VALID_STATE_PROV_COUNTRY);
     const persTripsFuture = parseTripCounts(persTripsFutureParam, VALID_STATE_PROV_COUNTRY);
+
+    // Combine-aware duplicate subtraction maps (Task 4 contract)
+    const combinePastMap = parseTripCounts(url.searchParams.get('combinePast') || '', VALID_STATE_PROV_COUNTRY);
+    const combineFutureMap = parseTripCounts(url.searchParams.get('combineFuture') || '', VALID_STATE_PROV_COUNTRY);
 
     // Helper function to split locations into past and future-only categories
     function splitPastFuture(allLocations, futureLocations, tripCounts, futureTripCounts) {
@@ -342,6 +350,9 @@ export default Sentry.withSentry(
       workFutureStates, personalFutureStates, workFutureProvinces, persCountriesFuture,
       workTripCounts, persTripCounts, totalTripCounts,
       workTripsFuture, persTripsFuture,
+      combinePastMap, combineFutureMap,
+      tripsPastParam: isNaN(tripsPastParam) ? null : tripsPastParam,
+      tripsUpcomingParam: isNaN(tripsUpcomingParam) ? null : tripsUpcomingParam,
       bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title,
       pastStates, futureOnlyStates,
       workOnlyPast: workOnlyPastFuture.past,
@@ -409,6 +420,8 @@ function generateMapHtml(data) {
     workFutureStates, personalFutureStates, workFutureProvinces, persCountriesFuture,
     workTripCounts, persTripCounts, totalTripCounts,
     workTripsFuture, persTripsFuture,
+    combinePastMap, combineFutureMap,
+    tripsPastParam, tripsUpcomingParam,
     bothStates, workOnly, personalOnly, allStates, allProvinces, allCountries, pct, title,
     pastStates, futureOnlyStates,
     workOnlyPast, workOnlyFuture,
@@ -1040,6 +1053,7 @@ function generateMapHtml(data) {
 
       let visStates = 0, visProvs = 0, visCountries = 0;
       let visWorkTrips = 0, visPersTrips = 0;
+      let visPastTrips = 0, visFutureTrips = 0;
       let workOnlyCount = 0, persOnlyCount = 0, bothCount = 0, futureOnlyCount = 0;
       const tripsByCode = {}; // code -> total visible trips
 
@@ -1068,6 +1082,14 @@ function generateMapHtml(data) {
         const total = wTrips + pTrips;
         if (total > 0) tripsByCode[code] = total;
 
+        // Track past/future separately (combine-aware)
+        const netPast = Math.max(0, info.workPast + info.persPast - info.combinePast);
+        const netFuture = Math.max(0, info.workFuture + info.persFuture - info.combineFuture);
+        if (view === 'all' || view === 'past') visPastTrips += netPast;
+        if (view === 'all' || view === 'future') visFutureTrips += netFuture;
+        if (view === 'work') visPastTrips += Math.max(0, info.workPast);
+        if (view === 'personal') visPastTrips += Math.max(0, info.persPast);
+
         // Breakdown
         if (cat === 'futureOnly') futureOnlyCount++;
         else if (cat === 'both') bothCount++;
@@ -1076,8 +1098,15 @@ function generateMapHtml(data) {
       });
 
       const totalLocs = visStates + visProvs + visCountries;
-      const totalTrips = visWorkTrips + visPersTrips;
       const pctVal = visStates > 0 ? Math.round(visStates / 50 * 100) : 0;
+
+      // Prefer canonical wiki totals in 'all' view; fall back to computed sums otherwise
+      let pastN = visPastTrips, upN = visFutureTrips;
+      if (currentView === 'all' && tripsPastParam !== null) {
+        pastN = tripsPastParam;
+        upN = tripsUpcomingParam !== null ? tripsUpcomingParam : 0;
+      }
+      const totalTrips = pastN + upN;
 
       // Sort destinations by trip count
       const sorted = Object.entries(tripsByCode).sort(function(a, b) { return b[1] - a[1]; });
@@ -1090,7 +1119,9 @@ function generateMapHtml(data) {
       if (visCountries > 0) {
         barHtml += '<div class="stat-divider"></div><div class="stat-item"><span class="stat-number">' + visCountries + '</span><span class="stat-label">' + (visCountries > 1 ? 'countries' : 'country') + '</span></div>';
       }
-      barHtml += '<div class="stat-divider"></div><span class="stat-total">' + totalTrips + ' total trips</span>';
+      barHtml += '<div class="stat-divider"></div><span class="stat-total">' + pastN + ' trip' + (pastN === 1 ? '' : 's');
+      if (upN > 0) { barHtml += ' · ' + upN + ' upcoming'; }
+      barHtml += '</span>';
       if (currentView !== 'all') {
         barHtml += '<span class="stat-breakdown">(filtered: ' + currentView + ')</span>';
       }
@@ -1100,7 +1131,7 @@ function generateMapHtml(data) {
       const mostVisited = sorted.length > 0 ? sorted[0] : null;
       let dashHtml = '<div class="dashboard-grid">';
       dashHtml += '<div class="dashboard-card"><h4>Total Locations</h4><div class="value">' + totalLocs + '</div><div class="label">' + visStates + ' states, ' + visProvs + ' provinces, ' + visCountries + ' countries</div></div>';
-      dashHtml += '<div class="dashboard-card"><h4>Total Trips</h4><div class="value">' + totalTrips + '</div><div class="label">' + visWorkTrips + ' work + ' + visPersTrips + ' personal</div></div>';
+      dashHtml += '<div class="dashboard-card"><h4>Total Trips</h4><div class="value">' + totalTrips + '</div><div class="label">' + pastN + ' past + ' + upN + ' upcoming</div></div>';
       dashHtml += '<div class="dashboard-card"><h4>US Coverage</h4><div class="value">' + pctVal + '%</div><div class="label">' + visStates + ' of 50 states</div></div>';
       dashHtml += '<div class="dashboard-card"><h4>Most Visited</h4><div class="value">' + (mostVisited ? lookupName(mostVisited[0]) : 'N/A') + '</div><div class="label">' + (mostVisited ? mostVisited[1] + ' trips' : '') + '</div></div>';
       dashHtml += '</div>';
@@ -1215,6 +1246,10 @@ function generateMapHtml(data) {
     const workTripsFuture = ${JSON.stringify(workTripsFuture)};
     const persTripsFuture = ${JSON.stringify(persTripsFuture)};
     const totalTripCounts = ${JSON.stringify(totalTripCounts)};
+    const combinePastMap = ${JSON.stringify(combinePastMap)};
+    const combineFutureMap = ${JSON.stringify(combineFutureMap)};
+    const tripsPastParam = ${tripsPastParam === null ? 'null' : tripsPastParam};
+    const tripsUpcomingParam = ${tripsUpcomingParam === null ? 'null' : tripsUpcomingParam};
     const stateNames = ${JSON.stringify(stateNames)};
     const provNames = ${JSON.stringify(provNames)};
     const countryNames = ${JSON.stringify(countryNames)};
@@ -1368,7 +1403,9 @@ function generateMapHtml(data) {
       const persFuture = persTripsFuture[code] || 0;
       const workPast = workTotal - workFuture;
       const persPast = persTotal - persFuture;
-      return { workTotal, persTotal, workFuture, persFuture, workPast, persPast };
+      const combinePast = combinePastMap[code] || 0;
+      const combineFuture = combineFutureMap[code] || 0;
+      return { workTotal, persTotal, workFuture, persFuture, workPast, persPast, combinePast, combineFuture };
     }
 
     function hasFutureTrips(code, locationType) {
@@ -1564,7 +1601,9 @@ function generateMapHtml(data) {
       const tripInfo = getTripInfo(code);
       const totalPast = tripInfo.workPast + tripInfo.persPast;
       const totalFuture = tripInfo.workFuture + tripInfo.persFuture;
-      
+      const visitsPast = Math.max(0, totalPast - tripInfo.combinePast);
+      const visitsFuture = Math.max(0, totalFuture - tripInfo.combineFuture);
+
       let statusText, statusColor;
       switch(category) {
         case 'work': statusText = 'Work'; statusColor = '#ff9800'; break;
@@ -1573,12 +1612,12 @@ function generateMapHtml(data) {
         case 'futureOnly': statusText = 'Future trips planned'; statusColor = '#03a9f4'; break;
         default: statusText = 'Not visited'; statusColor = '#999';
       }
-      
+
       let html = '<h4>' + name + '</h4>';
       html += '<div class="status" style="color:' + statusColor + '">' + statusText + '</div>';
-      
-      if (totalPast > 0) {
-        html += '<div class="trips">' + totalPast + ' trip' + (totalPast > 1 ? 's' : '') + '</div>';
+
+      if (visitsPast > 0) {
+        html += '<div class="trips">' + visitsPast + ' visit' + (visitsPast > 1 ? 's' : '') + '</div>';
         if (tripInfo.workPast > 0 || tripInfo.persPast > 0) {
           html += '<div class="trip-breakdown">';
           if (tripInfo.workPast > 0) html += '<span class="trip-work">' + tripInfo.workPast + ' work</span>';
@@ -1587,10 +1626,10 @@ function generateMapHtml(data) {
           html += '</div>';
         }
       }
-      
-      if (totalFuture > 0) {
+
+      if (visitsFuture > 0) {
         html += '<div class="trip-breakdown trip-future">';
-        html += '+' + totalFuture + ' upcoming';
+        html += '+' + visitsFuture + ' upcoming';
         if (tripInfo.workFuture > 0) html += ' <span class="trip-work">(' + tripInfo.workFuture + ' work)</span>';
         if (tripInfo.persFuture > 0) html += ' <span class="trip-personal">(' + tripInfo.persFuture + ' pers)</span>';
         html += '</div>';
