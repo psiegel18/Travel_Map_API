@@ -864,6 +864,13 @@ function generateMapHtml(data) {
       }
     }
 
+    // Escape HTML special characters for safe innerHTML insertion (defense-in-depth)
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
     // Share/Export functionality
     document.getElementById('copy-url-btn').addEventListener('click', function() {
       const url = window.location.href;
@@ -1615,7 +1622,7 @@ function generateMapHtml(data) {
         default: statusText = 'Not visited'; statusColor = '#999';
       }
 
-      let html = '<h4>' + name + '</h4>';
+      let html = '<h4>' + escapeHtml(name) + '</h4>';
       html += '<div class="status" style="color:' + statusColor + '">' + statusText + '</div>';
 
       if (visitsPast > 0) {
