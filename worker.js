@@ -1260,7 +1260,7 @@ function generateMapHtml(data) {
       center: [44, -98], zoom: 4,
       minZoom: 3, maxZoom: 10,
       worldCopyJump: false,
-      maxBounds: [[-58, -172], [80, 12]],   // Americas + W. Europe; blocks gray void & world repeat
+      maxBounds: [[-60, -180], [85, 180]],   // lat-clamped whole world; noWrap:true + minZoom:3 handle gray void
       maxBoundsViscosity: 0.9
     });
 
